@@ -1,0 +1,800 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Trophy,
+  Users,
+  CalendarDays,
+  Loader2,
+  Plus,
+  Trash2,
+  ArrowRight,
+  ArrowLeft,
+  Check,
+  Layers,
+} from "lucide-react";
+
+type Format = "LEAGUE" | "KNOCKOUT" | "GROUP_KNOCKOUT";
+type Step = "details" | "teams" | "groups" | "fixtures" | "review";
+
+const formats: { value: Format; label: string; desc: string }[] = [
+  { value: "LEAGUE", label: "League (Round Robin)", desc: "Every team plays each other" },
+  { value: "KNOCKOUT", label: "Knockout (Elimination)", desc: "Lose once, you're out" },
+  { value: "GROUP_KNOCKOUT", label: "Group + Knockout (UCL style)", desc: "Groups then knockout" },
+];
+
+interface ManualMatch {
+  id: string;
+  round: number;
+  stage: string;
+  homeTeamIdx: number;
+  awayTeamIdx: number;
+  homeScore?: number;
+  awayScore?: number;
+  status: "SCHEDULED" | "FINISHED";
+  groupIdx?: number;
+}
+
+interface GroupDef {
+  name: string;
+  teamIndices: number[];
+}
+
+export default function ManualSetupPage() {
+  const router = useRouter();
+  const [step, setStep] = useState<Step>("details");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Step 1: Tournament details
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [format, setFormat] = useState<Format>("GROUP_KNOCKOUT");
+  const [status, setStatus] = useState<"DRAFT" | "ACTIVE">("ACTIVE");
+
+  // Step 2: Teams
+  const [teams, setTeams] = useState<string[]>([""]);
+
+  // Step 3: Groups (for GROUP_KNOCKOUT)
+  const [groups, setGroups] = useState<GroupDef[]>([{ name: "Group A", teamIndices: [] }]);
+
+  // Step 4: Fixtures
+  const [matches, setMatches] = useState<ManualMatch[]>([]);
+
+  const validTeams = teams.filter((t) => t.trim().length >= 2);
+
+  const stepsForFormat: Step[] =
+    format === "GROUP_KNOCKOUT"
+      ? ["details", "teams", "groups", "fixtures", "review"]
+      : ["details", "teams", "fixtures", "review"];
+
+  const currentStepIdx = stepsForFormat.indexOf(step);
+  const canGoNext = () => {
+    if (step === "details") return name.trim().length >= 2;
+    if (step === "teams") return validTeams.length >= 2;
+    if (step === "groups") {
+      return groups.length >= 1 && groups.every((g) => g.teamIndices.length >= 2);
+    }
+    if (step === "fixtures") return true; // Fixtures are optional at setup
+    return true;
+  };
+
+  const goNext = () => {
+    const next = stepsForFormat[currentStepIdx + 1];
+    if (next) setStep(next);
+  };
+  const goBack = () => {
+    const prev = stepsForFormat[currentStepIdx - 1];
+    if (prev) setStep(prev);
+  };
+
+  // Team management
+  const addTeam = () => setTeams([...teams, ""]);
+  const removeTeam = (idx: number) => {
+    if (teams.length <= 1) return;
+    setTeams(teams.filter((_, i) => i !== idx));
+    // Remove from groups
+    setGroups(
+      groups.map((g) => ({
+        ...g,
+        teamIndices: g.teamIndices.filter((ti) => ti !== idx).map((ti) => (ti > idx ? ti - 1 : ti)),
+      }))
+    );
+    // Remove matches referencing this team
+    setMatches(
+      matches.filter((m) => m.homeTeamIdx !== idx && m.awayTeamIdx !== idx).map((m) => ({
+        ...m,
+        homeTeamIdx: m.homeTeamIdx > idx ? m.homeTeamIdx - 1 : m.homeTeamIdx,
+        awayTeamIdx: m.awayTeamIdx > idx ? m.awayTeamIdx - 1 : m.awayTeamIdx,
+      }))
+    );
+  };
+  const updateTeam = (idx: number, val: string) => {
+    const copy = [...teams];
+    copy[idx] = val;
+    setTeams(copy);
+  };
+
+  // Group management
+  const addGroup = () => {
+    const letter = String.fromCharCode(65 + groups.length);
+    setGroups([...groups, { name: `Group ${letter}`, teamIndices: [] }]);
+  };
+  const removeGroup = (idx: number) => {
+    if (groups.length <= 1) return;
+    setGroups(groups.filter((_, i) => i !== idx));
+  };
+  const toggleTeamInGroup = (groupIdx: number, teamIdx: number) => {
+    setGroups(
+      groups.map((g, gi) => {
+        if (gi !== groupIdx) {
+          // Remove from other groups
+          return { ...g, teamIndices: g.teamIndices.filter((ti) => ti !== teamIdx) };
+        }
+        // Toggle in this group
+        if (g.teamIndices.includes(teamIdx)) {
+          return { ...g, teamIndices: g.teamIndices.filter((ti) => ti !== teamIdx) };
+        }
+        return { ...g, teamIndices: [...g.teamIndices, teamIdx] };
+      })
+    );
+  };
+
+  // Match management
+  const addMatch = () => {
+    const maxRound = matches.length > 0 ? Math.max(...matches.map((m) => m.round)) : 1;
+    const defaultStage =
+      format === "GROUP_KNOCKOUT" ? "GROUP" : format === "KNOCKOUT" ? "KO" : "LEAGUE";
+    setMatches([
+      ...matches,
+      {
+        id: `m-${Date.now()}`,
+        round: maxRound,
+        stage: defaultStage,
+        homeTeamIdx: 0,
+        awayTeamIdx: validTeams.length > 1 ? 1 : 0,
+        status: "SCHEDULED",
+      },
+    ]);
+  };
+  const removeMatch = (idx: number) => setMatches(matches.filter((_, i) => i !== idx));
+  const updateMatch = (idx: number, field: string, value: unknown) => {
+    setMatches(
+      matches.map((m, i) => (i === idx ? { ...m, [field]: value } : m))
+    );
+  };
+
+  // Submit
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      // 1. Create organizer
+      const userRes = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Admin",
+          email: `admin-${Date.now()}@ftm.app`,
+          password: "password123",
+          role: "ORGANIZER",
+        }),
+      });
+      let organizerId = "demo";
+      if (userRes.ok) {
+        const user = await userRes.json();
+        organizerId = user.id;
+      }
+
+      // 2. Create tournament
+      const tournRes = await fetch("/api/tournaments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          description,
+          format,
+          status,
+          maxTeams: Math.max(validTeams.length, 16),
+          organizerId,
+          ...(format === "GROUP_KNOCKOUT" && {
+            groupCount: groups.length,
+            teamsPerGroup: groups.length > 0 ? Math.max(...groups.map((g) => g.teamIndices.length)) : 4,
+          }),
+        }),
+      });
+      if (!tournRes.ok) {
+        setError("Failed to create tournament");
+        return;
+      }
+      const tournament = await tournRes.json();
+      const tournId = tournament.id;
+
+      // 3. Add teams
+      const teamIds: string[] = [];
+      for (const teamName of validTeams) {
+        const res = await fetch(`/api/tournaments/${tournId}/teams`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: teamName }),
+        });
+        if (res.ok) {
+          const team = await res.json();
+          teamIds.push(team.id);
+        }
+      }
+
+      // 4. Create groups and assign teams (GROUP_KNOCKOUT)
+      if (format === "GROUP_KNOCKOUT" && groups.length > 0) {
+        await fetch(`/api/tournaments/${tournId}/groups`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            groups: groups.map((g) => ({
+              name: g.name,
+              teamIds: g.teamIndices.map((ti) => teamIds[ti]).filter(Boolean),
+            })),
+          }),
+        });
+
+        // Refetch groups to get real IDs
+        const groupsRes = await fetch(`/api/tournaments/${tournId}/groups`);
+        const createdGroups = await groupsRes.json();
+        const groupMap: Record<number, string> = {};
+        groups.forEach((g, i) => {
+          if (createdGroups[i]) groupMap[i] = createdGroups[i].id;
+        });
+
+        // 5. Create matches with real team IDs and group IDs
+        if (matches.length > 0) {
+          await fetch(`/api/tournaments/${tournId}/matches`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              matches: matches.map((m) => ({
+                round: m.round,
+                stage: m.stage,
+                homeTeamId: teamIds[m.homeTeamIdx],
+                awayTeamId: teamIds[m.awayTeamIdx],
+                homeScore: m.homeScore,
+                awayScore: m.awayScore,
+                status: m.status,
+                groupId: m.groupIdx !== undefined ? groupMap[m.groupIdx] : undefined,
+              })),
+            }),
+          });
+        }
+      } else if (matches.length > 0) {
+        // Non-group formats
+        await fetch(`/api/tournaments/${tournId}/matches`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            matches: matches.map((m) => ({
+              round: m.round,
+              stage: m.stage,
+              homeTeamId: teamIds[m.homeTeamIdx],
+              awayTeamId: teamIds[m.awayTeamIdx],
+              homeScore: m.homeScore,
+              awayScore: m.awayScore,
+              status: m.status,
+            })),
+          }),
+        });
+      }
+
+      router.push(`/tournaments/${tournId}`);
+    } catch {
+      setError("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const stepLabels: Record<Step, string> = {
+    details: "Details",
+    teams: "Teams",
+    groups: "Groups",
+    fixtures: "Fixtures",
+    review: "Review",
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-10">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+          <Layers className="w-5 h-5 text-orange-700" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Manual Tournament Setup</h1>
+          <p className="text-sm text-gray-500">Import an existing or in-progress competition</p>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="flex gap-1 mb-8">
+        {stepsForFormat.map((s, i) => (
+          <div key={s} className="flex-1">
+            <div
+              className={`h-1.5 rounded-full transition-colors ${
+                i <= currentStepIdx ? "bg-green-600" : "bg-gray-200"
+              }`}
+            />
+            <span className="text-[10px] text-gray-500 mt-0.5 block">{stepLabels[s]}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Step 1: Details */}
+      {step === "details" && (
+        <div className="bg-white rounded-xl border p-6 shadow-sm space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tournament Name *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Easter Cup 2026"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Brief description"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Format *</label>
+            <div className="space-y-2">
+              {formats.map((f) => (
+                <label
+                  key={f.value}
+                  className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    format === f.value ? "border-green-500 bg-green-50" : "hover:bg-gray-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="format"
+                    value={f.value}
+                    checked={format === f.value}
+                    onChange={() => setFormat(f.value)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-gray-800">{f.label}</div>
+                    <div className="text-xs text-gray-500">{f.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Tournament Status</label>
+            <div className="flex gap-3">
+              {(["DRAFT", "ACTIVE"] as const).map((s) => (
+                <label
+                  key={s}
+                  className={`flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-colors ${
+                    status === s ? "border-green-500 bg-green-50" : "hover:bg-gray-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    checked={status === s}
+                    onChange={() => setStatus(s)}
+                  />
+                  <span className="text-sm font-medium">{s === "DRAFT" ? "Not Started" : "Already In Progress"}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Teams */}
+      {step === "teams" && (
+        <div className="bg-white rounded-xl border p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Users className="w-4 h-4" /> Add Teams ({validTeams.length})
+            </h2>
+            <button
+              onClick={addTeam}
+              className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
+            >
+              <Plus className="w-3 h-3" /> Add Team
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            Enter all teams participating in the competition. You need at least 2.
+          </p>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {teams.map((team, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="text-xs font-mono text-gray-400 w-6 text-right">{idx + 1}.</span>
+                <input
+                  type="text"
+                  value={team}
+                  onChange={(e) => updateTeam(idx, e.target.value)}
+                  placeholder={`Team ${idx + 1} name`}
+                  className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+                {teams.length > 1 && (
+                  <button onClick={() => removeTeam(idx)} className="text-gray-300 hover:text-red-500">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Groups (GROUP_KNOCKOUT only) */}
+      {step === "groups" && (
+        <div className="bg-white rounded-xl border p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Trophy className="w-4 h-4" /> Assign Teams to Groups
+            </h2>
+            <button
+              onClick={addGroup}
+              className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
+            >
+              <Plus className="w-3 h-3" /> Add Group
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            Click a team name to assign it to a group. Each team should be in exactly one group.
+          </p>
+
+          {/* Unassigned teams */}
+          {(() => {
+            const assigned = new Set(groups.flatMap((g) => g.teamIndices));
+            const unassigned = validTeams.map((_, i) => i).filter((i) => !assigned.has(i));
+            if (unassigned.length === 0) return null;
+            return (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs font-medium text-yellow-700 mb-1.5">
+                  Unassigned ({unassigned.length}):
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {unassigned.map((ti) => (
+                    <span key={ti} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      {validTeams[ti]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="space-y-4">
+            {groups.map((group, gi) => (
+              <div key={gi} className="border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <input
+                    type="text"
+                    value={group.name}
+                    onChange={(e) =>
+                      setGroups(groups.map((g, i) => (i === gi ? { ...g, name: e.target.value } : g)))
+                    }
+                    className="text-sm font-semibold border-b border-transparent hover:border-gray-300 focus:border-green-500 outline-none px-1 py-0.5"
+                  />
+                  {groups.length > 1 && (
+                    <button onClick={() => removeGroup(gi)} className="text-gray-300 hover:text-red-500">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {validTeams.map((team, ti) => {
+                    const inThisGroup = group.teamIndices.includes(ti);
+                    const inAnotherGroup = !inThisGroup && groups.some((g, gj) => gj !== gi && g.teamIndices.includes(ti));
+                    return (
+                      <button
+                        key={ti}
+                        onClick={() => toggleTeamInGroup(gi, ti)}
+                        disabled={inAnotherGroup}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          inThisGroup
+                            ? "bg-green-100 border-green-300 text-green-800"
+                            : inAnotherGroup
+                            ? "bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-green-300 hover:bg-green-50"
+                        }`}
+                      >
+                        {team}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2">
+                  {group.teamIndices.length} team{group.teamIndices.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Fixtures */}
+      {step === "fixtures" && (
+        <div className="bg-white rounded-xl border p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <CalendarDays className="w-4 h-4" /> Set Up Fixtures ({matches.length})
+            </h2>
+            <button
+              onClick={addMatch}
+              className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
+            >
+              <Plus className="w-3 h-3" /> Add Match
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            Manually add fixtures. You can set scores for already-played matches. You can also add more later.
+          </p>
+
+          {matches.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No fixtures added yet. Click &quot;Add Match&quot; to start.</p>
+              <p className="text-xs mt-1">You can skip this and add fixtures later from the tournament page.</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[500px] overflow-y-auto">
+              {matches.map((match, idx) => (
+                <div key={match.id} className="border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-500">Match {idx + 1}</span>
+                    <button onClick={() => removeMatch(idx)} className="text-gray-300 hover:text-red-500">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-500">Round</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={match.round}
+                        onChange={(e) => updateMatch(idx, "round", Number(e.target.value))}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500">Stage</label>
+                      <select
+                        value={match.stage}
+                        onChange={(e) => updateMatch(idx, "stage", e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="GROUP">Group</option>
+                        <option value="LEAGUE">League</option>
+                        <option value="R16">Round of 16</option>
+                        <option value="QF">Quarter-final</option>
+                        <option value="SF">Semi-final</option>
+                        <option value="FINAL">Final</option>
+                        <option value="KO">Knockout</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Group assignment for GROUP_KNOCKOUT */}
+                  {format === "GROUP_KNOCKOUT" && match.stage === "GROUP" && (
+                    <div>
+                      <label className="text-[10px] text-gray-500">Group</label>
+                      <select
+                        value={match.groupIdx ?? ""}
+                        onChange={(e) =>
+                          updateMatch(idx, "groupIdx", e.target.value === "" ? undefined : Number(e.target.value))
+                        }
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">-- Select Group --</option>
+                        {groups.map((g, gi) => (
+                          <option key={gi} value={gi}>{g.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-5 gap-2 items-end">
+                    <div className="col-span-2">
+                      <label className="text-[10px] text-gray-500">Home Team</label>
+                      <select
+                        value={match.homeTeamIdx}
+                        onChange={(e) => updateMatch(idx, "homeTeamIdx", Number(e.target.value))}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        {validTeams.map((t, ti) => (
+                          <option key={ti} value={ti}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="text-center text-xs text-gray-400 py-1">vs</div>
+                    <div className="col-span-2">
+                      <label className="text-[10px] text-gray-500">Away Team</label>
+                      <select
+                        value={match.awayTeamIdx}
+                        onChange={(e) => updateMatch(idx, "awayTeamIdx", Number(e.target.value))}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        {validTeams.map((t, ti) => (
+                          <option key={ti} value={ti}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Score (optional — for backfilling) */}
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <input
+                        type="checkbox"
+                        checked={match.status === "FINISHED"}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            updateMatch(idx, "status", "FINISHED");
+                            if (match.homeScore === undefined) updateMatch(idx, "homeScore", 0);
+                            if (match.awayScore === undefined) updateMatch(idx, "awayScore", 0);
+                          } else {
+                            updateMatch(idx, "status", "SCHEDULED");
+                          }
+                        }}
+                      />
+                      Already played
+                    </label>
+                    {match.status === "FINISHED" && (
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input
+                          type="number"
+                          min={0}
+                          value={match.homeScore ?? 0}
+                          onChange={(e) => updateMatch(idx, "homeScore", Number(e.target.value))}
+                          className="w-12 border rounded px-2 py-1 text-center text-sm"
+                        />
+                        <span className="text-gray-400">-</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={match.awayScore ?? 0}
+                          onChange={(e) => updateMatch(idx, "awayScore", Number(e.target.value))}
+                          className="w-12 border rounded px-2 py-1 text-center text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 5: Review */}
+      {step === "review" && (
+        <div className="bg-white rounded-xl border p-6 shadow-sm space-y-5">
+          <h2 className="text-sm font-semibold text-gray-700">Review & Create</h2>
+
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Name</span>
+              <span className="font-medium">{name}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Format</span>
+              <span className="font-medium">{format.replace("_", " + ")}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Status</span>
+              <span className={`font-medium ${status === "ACTIVE" ? "text-green-600" : "text-gray-600"}`}>
+                {status === "ACTIVE" ? "In Progress" : "Not Started"}
+              </span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Teams</span>
+              <span className="font-medium">{validTeams.length}</span>
+            </div>
+            {format === "GROUP_KNOCKOUT" && (
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500">Groups</span>
+                <span className="font-medium">{groups.length}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Fixtures</span>
+              <span className="font-medium">
+                {matches.length} ({matches.filter((m) => m.status === "FINISHED").length} played)
+              </span>
+            </div>
+          </div>
+
+          {format === "GROUP_KNOCKOUT" && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-500">Group Assignments:</p>
+              {groups.map((g, gi) => (
+                <div key={gi} className="text-xs text-gray-600">
+                  <span className="font-medium">{g.name}:</span>{" "}
+                  {g.teamIndices.map((ti) => validTeams[ti]).join(", ") || "No teams"}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {matches.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-500">Fixtures Preview:</p>
+              <div className="max-h-[200px] overflow-y-auto space-y-1">
+                {matches.map((m, i) => (
+                  <div key={i} className="text-xs text-gray-600 flex items-center gap-2">
+                    <span className="text-gray-400">R{m.round}</span>
+                    <span className="font-medium">{validTeams[m.homeTeamIdx]}</span>
+                    {m.status === "FINISHED" ? (
+                      <span className="text-green-600 font-bold">{m.homeScore} - {m.awayScore}</span>
+                    ) : (
+                      <span className="text-gray-400">vs</span>
+                    )}
+                    <span className="font-medium">{validTeams[m.awayTeamIdx]}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                      m.status === "FINISHED" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                    }`}>
+                      {m.status === "FINISHED" ? "Played" : "Upcoming"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mt-4">
+          {error}
+        </p>
+      )}
+
+      {/* Navigation buttons */}
+      <div className="flex justify-between mt-6">
+        <button
+          onClick={goBack}
+          disabled={currentStepIdx === 0}
+          className="flex items-center gap-1 px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50 disabled:opacity-30"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+
+        {step === "review" ? (
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex items-center gap-2 bg-green-700 text-white font-semibold px-6 py-2.5 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {loading ? "Creating..." : "Create Tournament"}
+          </button>
+        ) : (
+          <button
+            onClick={goNext}
+            disabled={!canGoNext()}
+            className="flex items-center gap-1 bg-green-700 text-white px-4 py-2 text-sm rounded-lg hover:bg-green-600 disabled:opacity-40"
+          >
+            Next <ArrowRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
