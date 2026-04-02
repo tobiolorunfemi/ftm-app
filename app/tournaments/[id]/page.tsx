@@ -16,7 +16,7 @@ export default async function TournamentPage({
     include: {
       organizer: { select: { id: true, name: true } },
       teams: {
-        include: { group: true },
+        include: { group: true, standings: true },
         orderBy: { createdAt: "asc" },
       },
       groups: {
