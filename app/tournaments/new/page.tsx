@@ -31,26 +31,6 @@ export default function NewTournamentPage() {
     setError("");
 
     try {
-      // Create a demo organizer if none exists
-      let organizerId: string;
-      const userRes = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Demo Organizer",
-          email: `organizer-${Date.now()}@ftm.app`,
-          password: "password123",
-          role: "ORGANIZER",
-        }),
-      });
-      if (userRes.ok) {
-        const user = await userRes.json();
-        organizerId = user.id;
-      } else {
-        // Use a fallback — in real app, this comes from auth session
-        organizerId = "demo";
-      }
-
       const res = await fetch("/api/tournaments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -63,7 +43,6 @@ export default function NewTournamentPage() {
             groupCount: form.groupCount,
             teamsPerGroup: form.teamsPerGroup,
           }),
-          organizerId,
         }),
       });
 

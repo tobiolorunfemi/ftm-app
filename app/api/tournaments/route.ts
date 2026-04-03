@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireAuth } from "@/lib/apiAuth";
 
 const createSchema = z.object({
   name: z.string().min(2).max(100),
@@ -10,7 +11,6 @@ const createSchema = z.object({
   maxTeams: z.number().int().min(2).max(64).default(16),
   groupCount: z.number().int().min(2).max(16).optional(),
   teamsPerGroup: z.number().int().min(2).max(8).optional(),
-  organizerId: z.string(),
 });
 
 export async function GET() {
@@ -25,18 +25,19 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authResult = await requireAuth();
+  if ("error" in authResult) return authResult.error;
+
   const body = await req.json();
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { organizerId, ...data } = parsed.data;
-
   const tournament = await prisma.tournament.create({
     data: {
-      ...data,
-      organizer: { connect: { id: organizerId } },
+      ...parsed.data,
+      organizer: { connect: { id: authResult.userId } },
     },
   });
 

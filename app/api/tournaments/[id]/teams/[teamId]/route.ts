@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recalculateStandings } from "@/lib/standings";
 import { z } from "zod";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 const updateTeamSchema = z.object({
   name: z.string().min(2).max(80).optional(),
@@ -14,7 +15,10 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; teamId: string }> }
 ) {
-  const { teamId } = await params;
+  const { id, teamId } = await params;
+  const guard = await requireTournamentOwner(id);
+  if ("error" in guard) return guard.error;
+
   const body = await req.json();
   const parsed = updateTeamSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -32,6 +36,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; teamId: string }> }
 ) {
   const { id, teamId } = await params;
+  const guard = await requireTournamentOwner(id);
+  if ("error" in guard) return guard.error;
 
   // Delete matches involving this team
   await prisma.match.deleteMany({

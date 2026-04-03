@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recalculateStandings } from "@/lib/standings";
 import { z } from "zod";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 const updateSchema = z.object({
   homeScore: z.number().int().min(0).optional(),
@@ -38,6 +39,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  const existing = await prisma.match.findUnique({ where: { id }, select: { tournamentId: true } });
+  if (!existing) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+  const guard = await requireTournamentOwner(existing.tournamentId);
+  if ("error" in guard) return guard.error;
+
   const body = await req.json();
   const parsed = updateSchema.safeParse(body);
 
@@ -85,6 +92,9 @@ export async function DELETE(
   if (!match) {
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
   }
+
+  const guard = await requireTournamentOwner(match.tournamentId);
+  if ("error" in guard) return guard.error;
 
   await prisma.match.delete({ where: { id } });
 

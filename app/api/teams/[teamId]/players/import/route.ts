@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
+import { requireTeamOwner } from "@/lib/apiAuth";
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
 
@@ -9,6 +10,9 @@ export async function POST(
   { params }: { params: Promise<{ teamId: string }> }
 ) {
   const { teamId } = await params;
+  const guard = await requireTeamOwner(teamId);
+  if ("error" in guard) return guard.error;
+
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
 

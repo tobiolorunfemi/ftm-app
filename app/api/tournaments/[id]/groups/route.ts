@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 const createGroupSchema = z.object({
   name: z.string().min(1).max(50),
@@ -35,6 +36,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const guard = await requireTournamentOwner(id);
+  if ("error" in guard) return guard.error;
+
   const body = await req.json();
 
   // Bulk setup: { groups: [{ name, teamIds }] }

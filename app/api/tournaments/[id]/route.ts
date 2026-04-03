@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 const patchSchema = z.object({
   name: z.string().min(2).max(120).optional(),
@@ -38,6 +39,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const guard = await requireTournamentOwner(id);
+  if ("error" in guard) return guard.error;
+
   const body = await req.json();
 
   const parsed = patchSchema.safeParse(body);
@@ -58,6 +62,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const guard = await requireTournamentOwner(id);
+  if ("error" in guard) return guard.error;
 
   const tournament = await prisma.tournament.findUnique({ where: { id } });
   if (!tournament) {

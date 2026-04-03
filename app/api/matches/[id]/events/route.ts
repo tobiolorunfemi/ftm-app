@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 const eventSchema = z.object({
   type: z.enum(["GOAL", "ASSIST", "YELLOW_CARD", "RED_CARD"]),
@@ -29,6 +30,8 @@ export async function POST(
   const { id } = await params;
   const match = await prisma.match.findUnique({ where: { id } });
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+  const guard = await requireTournamentOwner(match.tournamentId);
+  if ("error" in guard) return guard.error;
 
   const body = await req.json();
   const parsed = eventSchema.safeParse(body);

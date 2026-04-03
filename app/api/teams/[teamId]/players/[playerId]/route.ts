@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireTeamOwner } from "@/lib/apiAuth";
 
 const updateSchema = z.object({
   name: z.string().min(2).max(80).optional(),
@@ -12,7 +13,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ teamId: string; playerId: string }> }
 ) {
-  const { playerId } = await params;
+  const { teamId, playerId } = await params;
+  const guard = await requireTeamOwner(teamId);
+  if ("error" in guard) return guard.error;
   const body = await req.json();
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -28,7 +31,10 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ teamId: string; playerId: string }> }
 ) {
-  const { playerId } = await params;
+  const { teamId, playerId } = await params;
+  const guard = await requireTeamOwner(teamId);
+  if ("error" in guard) return guard.error;
+
   await prisma.player.delete({ where: { id: playerId } });
   return NextResponse.json({ ok: true });
 }

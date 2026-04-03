@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recalculateStandings } from "@/lib/standings";
 import { z } from "zod";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 const createMatchSchema = z.object({
   round: z.number().int().min(1),
@@ -26,6 +27,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const guard = await requireTournamentOwner(id);
+  if ("error" in guard) return guard.error;
+
   const body = await req.json();
 
   const tournament = await prisma.tournament.findUnique({ where: { id } });

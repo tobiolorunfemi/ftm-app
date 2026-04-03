@@ -15,7 +15,7 @@ type Contact = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default function ContactPanel({ tournament }: { tournament: any }) {
+export default function ContactPanel({ tournament, readOnly }: { tournament: any; readOnly?: boolean }) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -96,12 +96,14 @@ export default function ContactPanel({ tournament }: { tournament: any }) {
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
           <h3 className="text-sm font-semibold text-gray-700">Organiser Details</h3>
-          <button
-            onClick={() => { setEditing(!editing); setForm(contact ?? {}); }}
-            className="text-xs text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded hover:bg-green-50"
-          >
-            {editing ? "Cancel" : "Edit"}
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => { setEditing(!editing); setForm(contact ?? {}); }}
+              className="text-xs text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded hover:bg-green-50"
+            >
+              {editing ? "Cancel" : "Edit"}
+            </button>
+          )}
         </div>
 
         {editing ? (
@@ -178,9 +180,11 @@ export default function ContactPanel({ tournament }: { tournament: any }) {
           <div className="text-center py-12 text-gray-400">
             <Mail className="w-8 h-8 mx-auto mb-2 opacity-30" />
             <p className="text-sm">No organiser details yet.</p>
-            <button onClick={() => setEditing(true)} className="text-xs text-green-700 mt-2 hover:underline">
-              + Add details
-            </button>
+            {!readOnly && (
+              <button onClick={() => setEditing(true)} className="text-xs text-green-700 mt-2 hover:underline">
+                + Add details
+              </button>
+            )}
           </div>
         )}
       </div>

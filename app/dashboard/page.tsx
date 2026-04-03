@@ -4,9 +4,18 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Trophy, PlusCircle } from "lucide-react";
 import TournamentCards from "./TournamentCards";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  const userId = session.user.id as string;
+  const isSuperAdmin = (session.user as { role?: string }).role === "SUPER_ADMIN";
+
   const tournaments = await prisma.tournament.findMany({
+    where: isSuperAdmin ? undefined : { organizerId: userId },
     orderBy: { createdAt: "desc" },
     include: {
       organizer: { select: { id: true, name: true } },
@@ -19,7 +28,9 @@ export default async function DashboardPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-1">All tournaments</p>
+          <p className="text-gray-500 text-sm mt-1">
+            {isSuperAdmin ? "All tournaments" : "Your tournaments"}
+          </p>
         </div>
         <Link
           href="/tournaments/new"

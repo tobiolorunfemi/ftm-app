@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 export async function DELETE(
   _req: NextRequest,
@@ -7,8 +8,13 @@ export async function DELETE(
 ) {
   const { eventId } = await params;
 
-  const event = await prisma.matchEvent.findUnique({ where: { id: eventId } });
+  const event = await prisma.matchEvent.findUnique({
+    where: { id: eventId },
+    include: { match: { select: { tournamentId: true } } },
+  });
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  const guard = await requireTournamentOwner(event.match.tournamentId);
+  if ("error" in guard) return guard.error;
 
   // Reverse player stat
   if (event.playerId) {

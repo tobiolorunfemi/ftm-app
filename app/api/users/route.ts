@@ -7,7 +7,6 @@ const registerSchema = z.object({
   name: z.string().min(2).max(80),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(["ORGANIZER", "TEAM_MANAGER", "FAN"]).default("ORGANIZER"),
 });
 
 export async function POST(req: NextRequest) {
@@ -31,7 +30,7 @@ export async function POST(req: NextRequest) {
       name: parsed.data.name,
       email: parsed.data.email,
       password: hashed,
-      role: parsed.data.role,
+      role: "COMPETITION_ADMIN",
     },
     select: { id: true, name: true, email: true, role: true, createdAt: true },
   });

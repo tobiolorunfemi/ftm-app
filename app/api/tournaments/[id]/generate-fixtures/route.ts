@@ -5,12 +5,15 @@ import {
   generateKnockoutFixtures,
   generateGroupKnockoutFixtures,
 } from "@/lib/fixture-generator";
+import { requireTournamentOwner } from "@/lib/apiAuth";
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const guard = await requireTournamentOwner(id);
+  if ("error" in guard) return guard.error;
 
   const tournament = await prisma.tournament.findUnique({
     where: { id },

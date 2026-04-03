@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Trophy, Zap, Users, BarChart3, ArrowRight } from "lucide-react";
+import JoinCodeSearch from "@/components/JoinCodeSearch";
 
 const features = [
   {
@@ -40,7 +41,7 @@ export default function HomePage() {
             Run your community tournament like a pro. Generate fixtures, track scores,
             and keep teams updated — all in one place.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
             <Link
               href="/tournaments/new"
               className="inline-flex items-center gap-2 bg-white text-green-700 font-semibold px-6 py-3 rounded-lg hover:bg-green-50 transition-colors"
@@ -53,12 +54,12 @@ export default function HomePage() {
             >
               Import Existing Competition <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link
-              href="/join"
-              className="inline-flex items-center gap-2 border-2 border-white text-white font-semibold px-6 py-3 rounded-lg hover:bg-green-600 transition-colors"
-            >
-              Join a Tournament
-            </Link>
+          </div>
+
+          {/* Join code search */}
+          <div className="border-t border-green-600 pt-8">
+            <p className="text-green-200 text-sm mb-3">Have a join code? View a tournament instantly:</p>
+            <JoinCodeSearch />
           </div>
         </div>
       </section>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Trophy, Users, CalendarDays, Copy, Zap, Loader2, Check,
-  BarChart2, Phone, Calendar,
+  BarChart2, Phone, Calendar, Share2,
 } from "lucide-react";
 import TeamsPanel from "@/components/TeamsPanel";
 import FixturesPanel from "@/components/FixturesPanel";
@@ -21,11 +21,19 @@ export default function TournamentClient({ tournament }: { tournament: any }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const copyJoinCode = () => {
     navigator.clipboard.writeText(tournament.joinCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const copyShareLink = () => {
+    const url = `${window.location.origin}/view/${tournament.joinCode}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const generateFixtures = async () => {
@@ -101,6 +109,15 @@ export default function TournamentClient({ tournament }: { tournament: any }) {
                 {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             </div>
+
+            {/* Share public view link */}
+            <button
+              onClick={copyShareLink}
+              className="flex items-center gap-1.5 text-sm border border-gray-200 bg-white text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Share2 className="w-3.5 h-3.5" />}
+              {copiedLink ? "Link Copied!" : "Share Public Link"}
+            </button>
 
             {/* Generate fixtures button */}
             {tournament.teams.length >= 2 && tournament.matches.length === 0 && (
