@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import {
   Trophy,
   Users,
@@ -13,6 +14,9 @@ import {
   ArrowLeft,
   Check,
   Layers,
+  Upload,
+  Download,
+  AlertCircle,
 } from "lucide-react";
 
 type Format = "LEAGUE" | "KNOCKOUT" | "GROUP_KNOCKOUT";
@@ -62,7 +66,168 @@ export default function ManualSetupPage() {
   // Step 4: Fixtures
   const [matches, setMatches] = useState<ManualMatch[]>([]);
 
+  // Import state
+  const teamsFileRef = useRef<HTMLInputElement>(null);
+  const fixturesFileRef = useRef<HTMLInputElement>(null);
+  const [teamsImportMsg, setTeamsImportMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [fixturesImportMsg, setFixturesImportMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
   const validTeams = teams.filter((t) => t.trim().length >= 2);
+
+  // Parse an uploaded file (xlsx/xls/csv) and return rows as objects
+  const parseFile = (file: File): Promise<Record<string, string>[]> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target!.result as ArrayBuffer);
+          const wb = XLSX.read(data, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
+          resolve(rows);
+        } catch {
+          reject(new Error("Could not read file. Make sure it is a valid .xlsx, .xls, or .csv file."));
+        }
+      };
+      reader.onerror = () => reject(new Error("File read error"));
+      reader.readAsArrayBuffer(file);
+    });
+
+  const importTeams = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setTeamsImportMsg(null);
+    try {
+      const rows = await parseFile(file);
+      // Accept column: "Team Name", "team_name", "name", "Team", "team" (case-insensitive)
+      const nameKey = Object.keys(rows[0] ?? {}).find((k) =>
+        /^team[\s_-]?name$|^name$|^team$/i.test(k.trim())
+      );
+      if (!nameKey) {
+        setTeamsImportMsg({ type: "err", text: 'Column "Team Name" not found. See expected format below.' });
+        return;
+      }
+      const imported = rows
+        .map((r) => String(r[nameKey] ?? "").trim())
+        .filter((n) => n.length >= 2);
+      if (imported.length === 0) {
+        setTeamsImportMsg({ type: "err", text: "No valid team names found in file." });
+        return;
+      }
+      // Merge with existing non-empty teams, deduplicate
+      const existing = teams.filter((t) => t.trim().length >= 2);
+      const merged = Array.from(new Set([...existing, ...imported]));
+      setTeams(merged.length > 0 ? merged : [""]);
+      setTeamsImportMsg({ type: "ok", text: `Imported ${imported.length} team(s). ${imported.length - (merged.length - existing.length)} duplicate(s) skipped.` });
+    } catch (err) {
+      setTeamsImportMsg({ type: "err", text: (err as Error).message });
+    }
+    if (teamsFileRef.current) teamsFileRef.current.value = "";
+  };
+
+  const importFixtures = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFixturesImportMsg(null);
+    try {
+      const rows = await parseFile(file);
+      if (rows.length === 0) {
+        setFixturesImportMsg({ type: "err", text: "File is empty." });
+        return;
+      }
+
+      // Normalise column keys: lower-case, strip spaces/underscores
+      const norm = (s: string) => s.toLowerCase().replace(/[\s_-]/g, "");
+      const col = (row: Record<string, string>, ...aliases: string[]) => {
+        const key = Object.keys(row).find((k) => aliases.includes(norm(k)));
+        return key ? String(row[key] ?? "").trim() : "";
+      };
+
+      const lowerNames = validTeams.map((t) => t.toLowerCase());
+      const findTeamIdx = (name: string) => {
+        const idx = lowerNames.indexOf(name.toLowerCase());
+        return idx;
+      };
+
+      const imported: ManualMatch[] = [];
+      const errors: string[] = [];
+
+      rows.forEach((row, i) => {
+        const home = col(row, "hometeam", "home");
+        const away = col(row, "awayteam", "away");
+        const homeIdx = findTeamIdx(home);
+        const awayIdx = findTeamIdx(away);
+
+        if (homeIdx === -1) { errors.push(`Row ${i + 2}: Home team "${home}" not found in teams list`); return; }
+        if (awayIdx === -1) { errors.push(`Row ${i + 2}: Away team "${away}" not found in teams list`); return; }
+        if (homeIdx === awayIdx) { errors.push(`Row ${i + 2}: Home and away team are the same`); return; }
+
+        const roundRaw = col(row, "round", "matchday", "gameweek", "gw");
+        const round = parseInt(roundRaw, 10) || 1;
+
+        const stageRaw = col(row, "stage", "phase", "round").toUpperCase();
+        const stageMap: Record<string, string> = {
+          GROUP: "GROUP", LEAGUE: "LEAGUE", R16: "R16", "ROUND OF 16": "R16",
+          QF: "QF", "QUARTER-FINAL": "QF", "QUARTERFINAL": "QF",
+          SF: "SF", "SEMI-FINAL": "SF", "SEMIFINAL": "SF",
+          FINAL: "FINAL", KO: "KO", KNOCKOUT: "KO",
+        };
+        const defaultStage = format === "GROUP_KNOCKOUT" ? "GROUP" : format === "KNOCKOUT" ? "KO" : "LEAGUE";
+        const stage = stageMap[stageRaw] ?? defaultStage;
+
+        const homeScoreRaw = col(row, "homescore", "homeg", "hg", "score1");
+        const awayScoreRaw = col(row, "awayscore", "awayg", "ag", "score2");
+        const homeScore = homeScoreRaw !== "" ? parseInt(homeScoreRaw, 10) : undefined;
+        const awayScore = awayScoreRaw !== "" ? parseInt(awayScoreRaw, 10) : undefined;
+
+        const statusRaw = col(row, "status", "result").toUpperCase();
+        const played = homeScore !== undefined && awayScore !== undefined;
+        const status: "SCHEDULED" | "FINISHED" =
+          statusRaw === "FINISHED" || statusRaw === "PLAYED" || played ? "FINISHED" : "SCHEDULED";
+
+        imported.push({
+          id: `m-${Date.now()}-${i}`,
+          round,
+          stage,
+          homeTeamIdx: homeIdx,
+          awayTeamIdx: awayIdx,
+          homeScore: status === "FINISHED" ? (homeScore ?? 0) : undefined,
+          awayScore: status === "FINISHED" ? (awayScore ?? 0) : undefined,
+          status,
+        });
+      });
+
+      if (imported.length === 0 && errors.length > 0) {
+        setFixturesImportMsg({ type: "err", text: errors.slice(0, 3).join("; ") });
+        return;
+      }
+
+      setMatches((prev) => [...prev, ...imported]);
+      const msg = `Imported ${imported.length} fixture(s).` + (errors.length > 0 ? ` ${errors.length} row(s) skipped.` : "");
+      setFixturesImportMsg({ type: imported.length > 0 ? "ok" : "err", text: msg });
+    } catch (err) {
+      setFixturesImportMsg({ type: "err", text: (err as Error).message });
+    }
+    if (fixturesFileRef.current) fixturesFileRef.current.value = "";
+  };
+
+  const downloadTeamsTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([["Team Name"], ["Arsenal FC"], ["Chelsea FC"], ["Liverpool FC"]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Teams");
+    XLSX.writeFile(wb, "teams-template.xlsx");
+  };
+
+  const downloadFixturesTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Round", "Stage", "Home Team", "Away Team", "Home Score", "Away Score", "Status"],
+      [1, "LEAGUE", "Arsenal FC", "Chelsea FC", 2, 1, "FINISHED"],
+      [1, "LEAGUE", "Liverpool FC", "Man United", "", "", "SCHEDULED"],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Fixtures");
+    XLSX.writeFile(wb, "fixtures-template.xlsx");
+  };
 
   const stepsForFormat: Step[] =
     format === "GROUP_KNOCKOUT"
@@ -170,24 +335,7 @@ export default function ManualSetupPage() {
     setLoading(true);
     setError("");
     try {
-      // 1. Create organizer
-      const userRes = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Admin",
-          email: `admin-${Date.now()}@ftm.app`,
-          password: "password123",
-          role: "ORGANIZER",
-        }),
-      });
-      let organizerId = "demo";
-      if (userRes.ok) {
-        const user = await userRes.json();
-        organizerId = user.id;
-      }
-
-      // 2. Create tournament
+      // 1. Create tournament (API uses session userId as organizerId)
       const tournRes = await fetch("/api/tournaments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -197,7 +345,6 @@ export default function ManualSetupPage() {
           format,
           status,
           maxTeams: Math.max(validTeams.length, 16),
-          organizerId,
           ...(format === "GROUP_KNOCKOUT" && {
             groupCount: groups.length,
             teamsPerGroup: groups.length > 0 ? Math.max(...groups.map((g) => g.teamIndices.length)) : 4,
@@ -211,7 +358,7 @@ export default function ManualSetupPage() {
       const tournament = await tournRes.json();
       const tournId = tournament.id;
 
-      // 3. Add teams
+      // 2. Add teams
       const teamIds: string[] = [];
       for (const teamName of validTeams) {
         const res = await fetch(`/api/tournaments/${tournId}/teams`, {
@@ -225,7 +372,7 @@ export default function ManualSetupPage() {
         }
       }
 
-      // 4. Create groups and assign teams (GROUP_KNOCKOUT)
+      // 3. Create groups and assign teams (GROUP_KNOCKOUT)
       if (format === "GROUP_KNOCKOUT" && groups.length > 0) {
         await fetch(`/api/tournaments/${tournId}/groups`, {
           method: "POST",
@@ -246,7 +393,7 @@ export default function ManualSetupPage() {
           if (createdGroups[i]) groupMap[i] = createdGroups[i].id;
         });
 
-        // 5. Create matches with real team IDs and group IDs
+        // 4. Create matches with real team IDs and group IDs
         if (matches.length > 0) {
           await fetch(`/api/tournaments/${tournId}/matches`, {
             method: "POST",
@@ -407,13 +554,52 @@ export default function ManualSetupPage() {
             <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
               <Users className="w-4 h-4" /> Add Teams ({validTeams.length})
             </h2>
-            <button
-              onClick={addTeam}
-              className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
-            >
-              <Plus className="w-3 h-3" /> Add Team
-            </button>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 cursor-pointer">
+                <Upload className="w-3 h-3" /> Import File
+                <input
+                  ref={teamsFileRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={importTeams}
+                />
+              </label>
+              <button
+                onClick={downloadTeamsTemplate}
+                className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg hover:bg-gray-100"
+                title="Download template"
+              >
+                <Download className="w-3 h-3" /> Template
+              </button>
+              <button
+                onClick={addTeam}
+                className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
+              >
+                <Plus className="w-3 h-3" /> Add Team
+              </button>
+            </div>
           </div>
+
+          {/* Import feedback */}
+          {teamsImportMsg && (
+            <div className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg ${
+              teamsImportMsg.type === "ok"
+                ? "bg-green-50 text-green-700 border border-green-200"
+                : "bg-red-50 text-red-600 border border-red-200"
+            }`}>
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              {teamsImportMsg.text}
+            </div>
+          )}
+
+          {/* Format hint */}
+          <div className="bg-gray-50 border rounded-lg px-3 py-2 text-xs text-gray-500">
+            <p className="font-medium text-gray-600 mb-1">File format (.xlsx / .xls / .csv):</p>
+            <p>One column header: <code className="bg-white border px-1 rounded">Team Name</code></p>
+            <p className="mt-0.5">Each row = one team. Download the template above for a ready-to-fill file.</p>
+          </div>
+
           <p className="text-xs text-gray-500">
             Enter all teams participating in the competition. You need at least 2.
           </p>
@@ -534,15 +720,55 @@ export default function ManualSetupPage() {
             <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
               <CalendarDays className="w-4 h-4" /> Set Up Fixtures ({matches.length})
             </h2>
-            <button
-              onClick={addMatch}
-              className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
-            >
-              <Plus className="w-3 h-3" /> Add Match
-            </button>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 cursor-pointer">
+                <Upload className="w-3 h-3" /> Import File
+                <input
+                  ref={fixturesFileRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={importFixtures}
+                />
+              </label>
+              <button
+                onClick={downloadFixturesTemplate}
+                className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg hover:bg-gray-100"
+                title="Download template"
+              >
+                <Download className="w-3 h-3" /> Template
+              </button>
+              <button
+                onClick={addMatch}
+                className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
+              >
+                <Plus className="w-3 h-3" /> Add Match
+              </button>
+            </div>
           </div>
+
+          {/* Import feedback */}
+          {fixturesImportMsg && (
+            <div className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg ${
+              fixturesImportMsg.type === "ok"
+                ? "bg-green-50 text-green-700 border border-green-200"
+                : "bg-red-50 text-red-600 border border-red-200"
+            }`}>
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              {fixturesImportMsg.text}
+            </div>
+          )}
+
+          {/* Format hint */}
+          <div className="bg-gray-50 border rounded-lg px-3 py-2 text-xs text-gray-500 space-y-1">
+            <p className="font-medium text-gray-600">File format (.xlsx / .xls / .csv):</p>
+            <p>Required columns: <code className="bg-white border px-1 rounded">Home Team</code> <code className="bg-white border px-1 rounded">Away Team</code></p>
+            <p>Optional: <code className="bg-white border px-1 rounded">Round</code> <code className="bg-white border px-1 rounded">Stage</code> <code className="bg-white border px-1 rounded">Home Score</code> <code className="bg-white border px-1 rounded">Away Score</code></p>
+            <p className="text-gray-400">Team names must match exactly what you entered in the Teams step.</p>
+          </div>
+
           <p className="text-xs text-gray-500">
-            Manually add fixtures. You can set scores for already-played matches. You can also add more later.
+            Manually add fixtures or import from file. You can set scores for already-played matches and add more later.
           </p>
 
           {matches.length === 0 ? (
