@@ -38,6 +38,8 @@ interface ManualMatch {
   awayScore?: number;
   status: "SCHEDULED" | "FINISHED";
   groupIdx?: number;
+  venue?: string;
+  scheduledAt?: string; // ISO string
 }
 
 interface GroupDef {
@@ -99,26 +101,42 @@ export default function ManualSetupPage() {
     setTeamsImportMsg(null);
     try {
       const rows = await parseFile(file);
-      // Accept column: "Team Name", "team_name", "name", "Team", "team" (case-insensitive)
-      const nameKey = Object.keys(rows[0] ?? {}).find((k) =>
-        /^team[\s_-]?name$|^name$|^team$/i.test(k.trim())
-      );
-      if (!nameKey) {
-        setTeamsImportMsg({ type: "err", text: 'Column "Team Name" not found. See expected format below.' });
-        return;
+      if (rows.length === 0) { setTeamsImportMsg({ type: "err", text: "File is empty." }); return; }
+      const cols = Object.keys(rows[0] ?? {});
+
+      // Check if this is a fixture file with Team / Team_1 columns
+      const isFixtureFile = cols.some((k) => /^team_?1$/i.test(k.trim()));
+
+      let imported: string[];
+      if (isFixtureFile) {
+        // Extract all unique team names from Team and Team_1 columns
+        const homeKey = cols.find((k) => /^team$/i.test(k.trim()));
+        const awayKey = cols.find((k) => /^team_?1$/i.test(k.trim()));
+        const names = new Set<string>();
+        rows.forEach((r) => {
+          if (homeKey) { const v = String(r[homeKey] ?? "").trim(); if (v.length >= 2) names.add(v); }
+          if (awayKey) { const v = String(r[awayKey] ?? "").trim(); if (v.length >= 2) names.add(v); }
+        });
+        imported = [...names];
+      } else {
+        // Standard Team Name column
+        const nameKey = cols.find((k) => /^team[\s_-]?name$|^name$|^team$/i.test(k.trim()));
+        if (!nameKey) {
+          setTeamsImportMsg({ type: "err", text: 'Column "Team Name" not found. See expected format below.' });
+          return;
+        }
+        imported = rows.map((r) => String(r[nameKey] ?? "").trim()).filter((n) => n.length >= 2);
       }
-      const imported = rows
-        .map((r) => String(r[nameKey] ?? "").trim())
-        .filter((n) => n.length >= 2);
+
       if (imported.length === 0) {
         setTeamsImportMsg({ type: "err", text: "No valid team names found in file." });
         return;
       }
-      // Merge with existing non-empty teams, deduplicate
       const existing = teams.filter((t) => t.trim().length >= 2);
       const merged = Array.from(new Set([...existing, ...imported]));
       setTeams(merged.length > 0 ? merged : [""]);
-      setTeamsImportMsg({ type: "ok", text: `Imported ${imported.length} team(s). ${imported.length - (merged.length - existing.length)} duplicate(s) skipped.` });
+      const dupes = imported.length - (merged.length - existing.length);
+      setTeamsImportMsg({ type: "ok", text: `Imported ${merged.length - existing.length} team(s).${dupes > 0 ? ` ${dupes} duplicate(s) skipped.` : ""}` });
     } catch (err) {
       setTeamsImportMsg({ type: "err", text: (err as Error).message });
     }
@@ -144,32 +162,48 @@ export default function ManualSetupPage() {
       };
 
       const lowerNames = validTeams.map((t) => t.toLowerCase());
-      const findTeamIdx = (name: string) => {
-        const idx = lowerNames.indexOf(name.toLowerCase());
-        return idx;
+      const findTeamIdx = (name: string) => lowerNames.indexOf(name.toLowerCase());
+
+      // Build group name → index map for GROUP_KNOCKOUT
+      const groupNameToIdx: Record<string, number> = {};
+      groups.forEach((g, i) => { groupNameToIdx[g.name.toLowerCase()] = i; });
+
+      // Convert Excel date serial to ISO string (noon UTC to avoid tz shift)
+      const excelDateToISO = (val: string): string | undefined => {
+        const num = Number(val);
+        if (!isNaN(num) && num > 40000) {
+          // XLSX serial: days since 1900-01-01 (with Lotus 1-2-3 bug offset)
+          const date = new Date(Math.round((num - 25569) * 86400 * 1000));
+          return date.toISOString();
+        }
+        // Try parsing as a date string
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? undefined : d.toISOString();
       };
 
       const imported: ManualMatch[] = [];
       const errors: string[] = [];
 
       rows.forEach((row, i) => {
-        const home = col(row, "hometeam", "home");
-        const away = col(row, "awayteam", "away");
+        // Home team: "Home Team", "hometeam", "home", "Team", "team"
+        const home = col(row, "hometeam", "home", "team");
+        // Away team: "Away Team", "awayteam", "away", "Team_1", "team1"
+        const away = col(row, "awayteam", "away", "team1");
         const homeIdx = findTeamIdx(home);
         const awayIdx = findTeamIdx(away);
 
-        if (homeIdx === -1) { errors.push(`Row ${i + 2}: Home team "${home}" not found in teams list`); return; }
-        if (awayIdx === -1) { errors.push(`Row ${i + 2}: Away team "${away}" not found in teams list`); return; }
+        if (homeIdx === -1) { errors.push(`Row ${i + 2}: Home team "${home}" not found`); return; }
+        if (awayIdx === -1) { errors.push(`Row ${i + 2}: Away team "${away}" not found`); return; }
         if (homeIdx === awayIdx) { errors.push(`Row ${i + 2}: Home and away team are the same`); return; }
 
         const roundRaw = col(row, "round", "matchday", "gameweek", "gw");
         const round = parseInt(roundRaw, 10) || 1;
 
-        const stageRaw = col(row, "stage", "phase", "round").toUpperCase();
+        const stageRaw = col(row, "stage", "phase").toUpperCase();
         const stageMap: Record<string, string> = {
           GROUP: "GROUP", LEAGUE: "LEAGUE", R16: "R16", "ROUND OF 16": "R16",
-          QF: "QF", "QUARTER-FINAL": "QF", "QUARTERFINAL": "QF",
-          SF: "SF", "SEMI-FINAL": "SF", "SEMIFINAL": "SF",
+          QF: "QF", "QUARTERFINAL": "QF", "QUARTER-FINAL": "QF",
+          SF: "SF", "SEMIFINAL": "SF", "SEMI-FINAL": "SF",
           FINAL: "FINAL", KO: "KO", KNOCKOUT: "KO",
         };
         const defaultStage = format === "GROUP_KNOCKOUT" ? "GROUP" : format === "KNOCKOUT" ? "KO" : "LEAGUE";
@@ -185,6 +219,22 @@ export default function ManualSetupPage() {
         const status: "SCHEDULED" | "FINISHED" =
           statusRaw === "FINISHED" || statusRaw === "PLAYED" || played ? "FINISHED" : "SCHEDULED";
 
+        // Venue: "Propose Location", "venue", "location", "ground"
+        const venueRaw = col(row, "proposelocation", "venue", "location", "ground", "stadium");
+        const venue = venueRaw || undefined;
+
+        // Date: "Date", "date", "kickoff", "kickofftime"
+        const dateRaw = col(row, "date", "kickoff", "kickofftime", "datetime");
+        const scheduledAt = dateRaw ? excelDateToISO(dateRaw) : undefined;
+
+        // Group assignment from "Group" column
+        const groupNameRaw = col(row, "group", "groupname");
+        let groupIdx: number | undefined;
+        if (groupNameRaw) {
+          const gi = groupNameToIdx[groupNameRaw.toLowerCase()];
+          groupIdx = gi !== undefined ? gi : undefined;
+        }
+
         imported.push({
           id: `m-${Date.now()}-${i}`,
           round,
@@ -194,6 +244,9 @@ export default function ManualSetupPage() {
           homeScore: status === "FINISHED" ? (homeScore ?? 0) : undefined,
           awayScore: status === "FINISHED" ? (awayScore ?? 0) : undefined,
           status,
+          venue,
+          scheduledAt,
+          groupIdx,
         });
       });
 
@@ -203,7 +256,14 @@ export default function ManualSetupPage() {
       }
 
       setMatches((prev) => [...prev, ...imported]);
-      const msg = `Imported ${imported.length} fixture(s).` + (errors.length > 0 ? ` ${errors.length} row(s) skipped.` : "");
+      const withGroup = imported.filter((m) => m.groupIdx !== undefined).length;
+      const withVenue = imported.filter((m) => m.venue).length;
+      const withDate = imported.filter((m) => m.scheduledAt).length;
+      let msg = `Imported ${imported.length} fixture(s).`;
+      if (withGroup > 0) msg += ` ${withGroup} auto-assigned to groups.`;
+      if (withVenue > 0) msg += ` ${withVenue} with venue.`;
+      if (withDate > 0) msg += ` ${withDate} with date.`;
+      if (errors.length > 0) msg += ` ${errors.length} row(s) skipped.`;
       setFixturesImportMsg({ type: imported.length > 0 ? "ok" : "err", text: msg });
     } catch (err) {
       setFixturesImportMsg({ type: "err", text: (err as Error).message });
@@ -408,6 +468,8 @@ export default function ManualSetupPage() {
                 awayScore: m.awayScore,
                 status: m.status,
                 groupId: m.groupIdx !== undefined ? groupMap[m.groupIdx] : undefined,
+                venue: m.venue,
+                scheduledAt: m.scheduledAt,
               })),
             }),
           });
@@ -426,6 +488,8 @@ export default function ManualSetupPage() {
               homeScore: m.homeScore,
               awayScore: m.awayScore,
               status: m.status,
+              venue: m.venue,
+              scheduledAt: m.scheduledAt,
             })),
           }),
         });
@@ -761,9 +825,10 @@ export default function ManualSetupPage() {
 
           {/* Format hint */}
           <div className="bg-gray-50 border rounded-lg px-3 py-2 text-xs text-gray-500 space-y-1">
-            <p className="font-medium text-gray-600">File format (.xlsx / .xls / .csv):</p>
-            <p>Required columns: <code className="bg-white border px-1 rounded">Home Team</code> <code className="bg-white border px-1 rounded">Away Team</code></p>
-            <p>Optional: <code className="bg-white border px-1 rounded">Round</code> <code className="bg-white border px-1 rounded">Stage</code> <code className="bg-white border px-1 rounded">Home Score</code> <code className="bg-white border px-1 rounded">Away Score</code></p>
+            <p className="font-medium text-gray-600">Accepted file formats (.xlsx / .xls / .csv):</p>
+            <p><span className="font-medium text-gray-600">Standard:</span> <code className="bg-white border px-1 rounded">Home Team</code> <code className="bg-white border px-1 rounded">Away Team</code> <code className="bg-white border px-1 rounded">Round</code></p>
+            <p><span className="font-medium text-gray-600">Fixture-style:</span> <code className="bg-white border px-1 rounded">Team</code> <code className="bg-white border px-1 rounded">Team_1</code> <code className="bg-white border px-1 rounded">Matchday</code> <code className="bg-white border px-1 rounded">Group</code></p>
+            <p>Also picks up: <code className="bg-white border px-1 rounded">Propose Location</code> → venue &nbsp;|&nbsp; <code className="bg-white border px-1 rounded">Date</code> → kick-off time</p>
             <p className="text-gray-400">Team names must match exactly what you entered in the Teams step.</p>
           </div>
 
