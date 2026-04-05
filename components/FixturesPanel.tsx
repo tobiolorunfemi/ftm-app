@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays, Loader2, Plus, Trash2, Pencil,
-  MapPin, Clock, ChevronDown, ChevronUp, X,
+  MapPin, Clock, ChevronDown, ChevronUp, X, Save, Check,
 } from "lucide-react";
 
 type MatchStatus = "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED";
@@ -205,15 +205,18 @@ function MatchEventsPanel({ match, onChanged }: { match: any; onChanged: () => v
 function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
   const [home, setHome] = useState(match.homeScore ?? 0);
   const [away, setAwayScore] = useState(match.awayScore ?? 0);
+  const [status, setStatus] = useState<MatchStatus>(match.status ?? "SCHEDULED");
   const [venue, setVenue] = useState(match.venue ?? "");
   const [venueLocation, setVenueLocation] = useState(match.venueLocation ?? "");
   const [scheduledAt, setScheduledAt] = useState(
     match.scheduledAt ? new Date(match.scheduledAt).toISOString().slice(0, 16) : ""
   );
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [showEvents, setShowEvents] = useState(false);
 
-  const save = async (status: MatchStatus) => {
+  const save = async (overrideStatus?: MatchStatus) => {
+    const finalStatus = overrideStatus ?? status;
     setSaving(true);
     try {
       await fetch(`/api/matches/${match.id}`, {
@@ -222,12 +225,15 @@ function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
         body: JSON.stringify({
           homeScore: home,
           awayScore: away,
-          status,
+          status: finalStatus,
           venue: venue || undefined,
           venueLocation: venueLocation || undefined,
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
         }),
       });
+      if (overrideStatus) setStatus(overrideStatus);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
       onSave();
     } finally {
       setSaving(false);
@@ -236,44 +242,40 @@ function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
 
   return (
     <div className="space-y-3">
-      {/* Score row */}
+      {/* Score + status row */}
       <div className="flex items-center gap-2 flex-wrap">
         <input
           type="number"
           min={0}
           value={home}
           onChange={(e) => setHome(Number(e.target.value))}
-          className="w-14 border rounded px-2 py-1 text-center text-sm"
+          className="w-14 border rounded px-2 py-1 text-center text-sm font-semibold"
         />
-        <span className="text-gray-400">–</span>
+        <span className="text-gray-400 font-bold">–</span>
         <input
           type="number"
           min={0}
           value={away}
           onChange={(e) => setAwayScore(Number(e.target.value))}
-          className="w-14 border rounded px-2 py-1 text-center text-sm"
+          className="w-14 border rounded px-2 py-1 text-center text-sm font-semibold"
         />
-        <button
-          onClick={() => save("LIVE")}
-          disabled={saving}
-          className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200"
-        >
-          Live
-        </button>
-        <button
-          onClick={() => save("FINISHED")}
-          disabled={saving}
-          className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200"
-        >
-          {saving ? <Loader2 className="w-3 h-3 animate-spin inline" /> : "Full Time"}
-        </button>
-        <button
-          onClick={() => save("SCHEDULED")}
-          disabled={saving}
-          className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200"
-        >
-          Reset
-        </button>
+
+        {/* Status quick-select */}
+        <div className="flex gap-1 ml-1">
+          {(["SCHEDULED", "LIVE", "FINISHED", "POSTPONED"] as MatchStatus[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={`text-[10px] font-medium px-2 py-1 rounded transition-colors ${
+                status === s
+                  ? statusStyle[s] + " ring-1 ring-offset-1 ring-current"
+                  : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+              }`}
+            >
+              {s === "SCHEDULED" ? "Scheduled" : s === "LIVE" ? "Live" : s === "FINISHED" ? "Full Time" : "Postponed"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Venue & time */}
@@ -310,13 +312,24 @@ function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
           />
         </div>
       </div>
-      <div className="flex justify-between items-center">
+
+      {/* Save + events row */}
+      <div className="flex items-center justify-between pt-1">
         <button
-          onClick={() => setScheduledAt(scheduledAt)}
-          className="text-[10px] text-gray-400 hover:text-gray-600"
+          onClick={() => save()}
+          disabled={saving}
+          className="flex items-center gap-1.5 bg-green-700 text-white text-xs font-semibold px-4 py-1.5 rounded-lg hover:bg-green-600 disabled:opacity-60 transition-colors"
         >
-          {/* Just triggers re-render to apply venue save on next status button click */}
+          {saving ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : saved ? (
+            <Check className="w-3.5 h-3.5" />
+          ) : (
+            <Save className="w-3.5 h-3.5" />
+          )}
+          {saving ? "Saving…" : saved ? "Saved!" : "Save Changes"}
         </button>
+
         <button
           onClick={() => setShowEvents(!showEvents)}
           className="flex items-center gap-1 text-xs text-green-700 hover:text-green-900"
