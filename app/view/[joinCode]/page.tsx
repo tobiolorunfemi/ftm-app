@@ -37,7 +37,15 @@ export default async function PublicViewPage({
         orderBy: { name: "asc" },
       },
       matches: {
-        include: { homeTeam: true, awayTeam: true, group: true },
+        include: {
+          homeTeam: true,
+          awayTeam: true,
+          group: true,
+          events: {
+            include: { player: true, team: true },
+            orderBy: { minute: "asc" },
+          },
+        },
         orderBy: [{ round: "asc" }, { matchNumber: "asc" }],
       },
       contact: true,
