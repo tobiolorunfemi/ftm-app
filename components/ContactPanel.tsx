@@ -108,7 +108,7 @@ export default function ContactPanel({ tournament, readOnly }: { tournament: any
 
         {editing ? (
           <div className="p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {field("name", "Name", "Organiser name")}
               {field("organisation", "Organisation", "Club / Association name")}
               {field("email", "Email", "contact@example.com", "email")}

@@ -12,14 +12,15 @@ export default function JoinCodeSearch() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = code.trim().toUpperCase();
+    const trimmed = code.trim();
     if (!trimmed) return;
     setError("");
     setLoading(true);
     try {
       const res = await fetch(`/api/tournaments/lookup?joinCode=${encodeURIComponent(trimmed)}`);
       if (res.ok) {
-        router.push(`/view/${trimmed}`);
+        const data = await res.json();
+        router.push(`/view/${data.joinCode}`);
       } else {
         setError("No tournament found with that code.");
       }

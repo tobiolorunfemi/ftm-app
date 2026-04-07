@@ -56,6 +56,7 @@ export default async function PublicViewPage({
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "fixtures", label: `Fixtures (${tournament.matches.length})`, icon: "calendar" },
+    { id: "calendar", label: "Calendar", icon: "calendardays" },
     { id: "standings", label: "Standings", icon: "trophy" },
     { id: "statistics", label: "Statistics", icon: "chart" },
     { id: "teams", label: `Teams (${tournament.teams.length})`, icon: "users" },

@@ -12,19 +12,19 @@ function StandingsTable({ standings, title }: { standings: any[]; title?: string
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-xs sm:text-sm">
           <thead>
             <tr className="border-b bg-gray-50 text-xs text-gray-500 font-medium">
-              <th className="text-left px-4 py-2 w-8">#</th>
-              <th className="text-left px-4 py-2">Team</th>
-              <th className="text-center px-2 py-2">P</th>
-              <th className="text-center px-2 py-2">W</th>
-              <th className="text-center px-2 py-2">D</th>
-              <th className="text-center px-2 py-2">L</th>
-              <th className="text-center px-2 py-2">GF</th>
-              <th className="text-center px-2 py-2">GA</th>
-              <th className="text-center px-2 py-2">GD</th>
-              <th className="text-center px-4 py-2 font-bold">Pts</th>
+              <th className="text-left px-2 sm:px-4 py-2 w-7 sm:w-8">#</th>
+              <th className="text-left px-2 sm:px-4 py-2">Team</th>
+              <th className="text-center px-1.5 sm:px-2 py-2">P</th>
+              <th className="text-center px-1.5 sm:px-2 py-2">W</th>
+              <th className="text-center px-1.5 sm:px-2 py-2">D</th>
+              <th className="text-center px-1.5 sm:px-2 py-2">L</th>
+              <th className="text-center px-1.5 sm:px-2 py-2 hidden sm:table-cell">GF</th>
+              <th className="text-center px-1.5 sm:px-2 py-2 hidden sm:table-cell">GA</th>
+              <th className="text-center px-1.5 sm:px-2 py-2 hidden xs:table-cell">GD</th>
+              <th className="text-center px-2 sm:px-4 py-2 font-bold">Pts</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -34,18 +34,18 @@ function StandingsTable({ standings, title }: { standings: any[]; title?: string
                 key={s.id}
                 className={`transition-colors ${i === 0 ? "bg-green-50" : "hover:bg-gray-50"}`}
               >
-                <td className="px-4 py-2.5 text-gray-500 font-medium">{i + 1}</td>
-                <td className="px-4 py-2.5 font-medium text-gray-800">{s.team.name}</td>
-                <td className="px-2 py-2.5 text-center text-gray-600">{s.played}</td>
-                <td className="px-2 py-2.5 text-center text-gray-600">{s.won}</td>
-                <td className="px-2 py-2.5 text-center text-gray-600">{s.drawn}</td>
-                <td className="px-2 py-2.5 text-center text-gray-600">{s.lost}</td>
-                <td className="px-2 py-2.5 text-center text-gray-600">{s.goalsFor}</td>
-                <td className="px-2 py-2.5 text-center text-gray-600">{s.goalsAgainst}</td>
-                <td className={`px-2 py-2.5 text-center font-medium ${s.goalDiff > 0 ? "text-green-600" : s.goalDiff < 0 ? "text-red-500" : "text-gray-600"}`}>
+                <td className="px-2 sm:px-4 py-2 sm:py-2.5 text-gray-500 font-medium">{i + 1}</td>
+                <td className="px-2 sm:px-4 py-2 sm:py-2.5 font-medium text-gray-800 max-w-[120px] sm:max-w-none truncate">{s.team.name}</td>
+                <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-600">{s.played}</td>
+                <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-600">{s.won}</td>
+                <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-600">{s.drawn}</td>
+                <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-600">{s.lost}</td>
+                <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-600 hidden sm:table-cell">{s.goalsFor}</td>
+                <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-600 hidden sm:table-cell">{s.goalsAgainst}</td>
+                <td className={`px-1.5 sm:px-2 py-2 sm:py-2.5 text-center font-medium hidden xs:table-cell ${s.goalDiff > 0 ? "text-green-600" : s.goalDiff < 0 ? "text-red-500" : "text-gray-600"}`}>
                   {s.goalDiff > 0 ? `+${s.goalDiff}` : s.goalDiff}
                 </td>
-                <td className="px-4 py-2.5 text-center font-bold text-gray-900">{s.points}</td>
+                <td className="px-2 sm:px-4 py-2 sm:py-2.5 text-center font-bold text-gray-900">{s.points}</td>
               </tr>
             ))}
           </tbody>

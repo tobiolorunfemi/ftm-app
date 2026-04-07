@@ -104,10 +104,10 @@ function PlayerRow({
             ))}
           </select>
         </td>
-        <td className="px-3 py-2 text-center text-xs text-gray-400">—</td>
-        <td className="px-3 py-2 text-center text-xs text-gray-400">—</td>
-        <td className="px-3 py-2 text-center text-xs text-gray-400">—</td>
-        <td className="px-3 py-2 text-center text-xs text-gray-400">—</td>
+        <td className="px-2 sm:px-3 py-2 text-center text-xs text-gray-400 hidden sm:table-cell">—</td>
+        <td className="px-2 sm:px-3 py-2 text-center text-xs text-gray-400 hidden sm:table-cell">—</td>
+        <td className="px-2 sm:px-3 py-2 text-center text-xs text-gray-400 hidden sm:table-cell">—</td>
+        <td className="px-2 sm:px-3 py-2 text-center text-xs text-gray-400 hidden sm:table-cell">—</td>
         <td className="px-3 py-2">
           <div className="flex gap-1">
             <button onClick={save} disabled={saving} className="text-green-700 hover:text-green-900">
@@ -124,20 +124,20 @@ function PlayerRow({
 
   return (
     <tr className="hover:bg-gray-50">
-      <td className="px-3 py-2 text-center text-xs text-gray-500 font-mono">
+      <td className="px-2 sm:px-3 py-2 text-center text-xs text-gray-500 font-mono">
         {player.jerseyNumber ?? "—"}
       </td>
-      <td className="px-3 py-2 text-sm font-medium text-gray-800">{player.name}</td>
-      <td className="px-3 py-2">
+      <td className="px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium text-gray-800">{player.name}</td>
+      <td className="px-2 sm:px-3 py-2">
         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${POSITION_COLORS[player.position] ?? "bg-gray-100 text-gray-600"}`}>
           {player.position}
         </span>
       </td>
-      <td className="px-3 py-2 text-center text-sm text-gray-700">{player.goals}</td>
-      <td className="px-3 py-2 text-center text-sm text-gray-700">{player.assists}</td>
-      <td className="px-3 py-2 text-center text-sm text-yellow-600">{player.yellowCards}</td>
-      <td className="px-3 py-2 text-center text-sm text-red-600">{player.redCards}</td>
-      <td className="px-3 py-2">
+      <td className="px-2 sm:px-3 py-2 text-center text-xs sm:text-sm text-gray-700 hidden sm:table-cell">{player.goals}</td>
+      <td className="px-2 sm:px-3 py-2 text-center text-xs sm:text-sm text-gray-700 hidden sm:table-cell">{player.assists}</td>
+      <td className="px-2 sm:px-3 py-2 text-center text-xs sm:text-sm text-yellow-600 hidden sm:table-cell">{player.yellowCards}</td>
+      <td className="px-2 sm:px-3 py-2 text-center text-xs sm:text-sm text-red-600 hidden sm:table-cell">{player.redCards}</td>
+      <td className="px-2 sm:px-3 py-2">
         <div className="flex gap-1">
           <button onClick={() => setEditing(true)} className="text-gray-300 hover:text-green-600">
             <Pencil className="w-3.5 h-3.5" />
@@ -306,7 +306,7 @@ function TeamCard({
       {editProfile && (
         <div className="px-4 pb-3 border-t bg-gray-50 space-y-2 pt-3">
           <p className="text-xs font-semibold text-gray-500 uppercase">Team Profile</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-gray-500">Head Coach</label>
               <input
@@ -365,14 +365,14 @@ function TeamCard({
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 text-gray-500 text-left">
-                        <th className="px-3 py-2 text-center w-8">#</th>
-                        <th className="px-3 py-2">Player</th>
-                        <th className="px-3 py-2">Pos</th>
-                        <th className="px-3 py-2 text-center">⚽</th>
-                        <th className="px-3 py-2 text-center">🎯</th>
-                        <th className="px-3 py-2 text-center">🟨</th>
-                        <th className="px-3 py-2 text-center">🟥</th>
-                        <th className="px-3 py-2 w-14"></th>
+                        <th className="px-2 sm:px-3 py-2 text-center w-7 sm:w-8">#</th>
+                        <th className="px-2 sm:px-3 py-2">Player</th>
+                        <th className="px-2 sm:px-3 py-2">Pos</th>
+                        <th className="px-2 sm:px-3 py-2 text-center hidden sm:table-cell">⚽</th>
+                        <th className="px-2 sm:px-3 py-2 text-center hidden sm:table-cell">🎯</th>
+                        <th className="px-2 sm:px-3 py-2 text-center hidden sm:table-cell">🟨</th>
+                        <th className="px-2 sm:px-3 py-2 text-center hidden sm:table-cell">🟥</th>
+                        <th className="px-2 sm:px-3 py-2 w-10 sm:w-14"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">

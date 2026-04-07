@@ -13,6 +13,7 @@ type Tab = { id: string; label: string; icon?: string };
 
 const iconMap: Record<string, React.ReactNode> = {
   calendar: <CalendarDays className="w-3.5 h-3.5" />,
+  calendardays: <Calendar className="w-3.5 h-3.5" />,
   trophy: <Trophy className="w-3.5 h-3.5" />,
   chart: <BarChart2 className="w-3.5 h-3.5" />,
   users: <Users className="w-3.5 h-3.5" />,
@@ -64,6 +65,7 @@ export default function PublicTabs({ tournament, tabs }: { tournament: any; tabs
       )}
 
       {active === "fixtures" && <PublicFixturesPanel tournament={tournament} />}
+      {active === "calendar" && <CalendarPanel tournament={tournament} />}
       {active === "standings" && <StandingsPanel tournament={tournament} />}
       {active === "statistics" && <StatisticsPanel tournament={tournament} />}
       {active === "teams" && <PublicTeamsPanel tournament={tournament} />}

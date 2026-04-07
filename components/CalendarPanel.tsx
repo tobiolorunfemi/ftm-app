@@ -119,14 +119,17 @@ export default function CalendarPanel({ tournament }: { tournament: any }) {
           {/* Day headers */}
           <div className="grid grid-cols-7 border-b">
             {DAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-2">{d}</div>
+              <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-2">
+                <span className="hidden sm:inline">{d}</span>
+                <span className="sm:hidden">{d[0]}</span>
+              </div>
             ))}
           </div>
 
           {/* Calendar grid */}
           <div className="grid grid-cols-7 divide-x divide-y">
             {cells.map((day, i) => {
-              if (!day) return <div key={`empty-${i}`} className="bg-gray-50 h-16 sm:h-20" />;
+              if (!day) return <div key={`empty-${i}`} className="bg-gray-50 h-12 sm:h-20" />;
               const key = cellKey(day);
               const dayMatches = matchesByDate[key] ?? [];
               const isToday = key === todayKey;
@@ -135,30 +138,40 @@ export default function CalendarPanel({ tournament }: { tournament: any }) {
                 <button
                   key={key}
                   onClick={() => setSelectedDate(isSelected ? null : key)}
-                  className={`h-16 sm:h-20 p-1 text-left hover:bg-green-50 transition-colors relative ${
+                  className={`h-12 sm:h-20 p-0.5 sm:p-1 text-left hover:bg-green-50 transition-colors relative ${
                     isSelected ? "bg-green-50 ring-2 ring-inset ring-green-400" : ""
                   }`}
                 >
                   <span
-                    className={`text-xs font-medium block mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
+                    className={`text-[10px] sm:text-xs font-medium block mb-0.5 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full ${
                       isToday ? "bg-green-700 text-white" : "text-gray-600"
                     }`}
                   >
                     {day}
                   </span>
-                  <div className="space-y-0.5 overflow-hidden">
-                    {dayMatches.slice(0, 2).map((m) => (
-                      <div key={m.id} className="flex items-center gap-0.5">
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[m.status] ?? "bg-gray-400"}`} />
-                        <span className="text-[9px] text-gray-600 truncate leading-tight">
-                          {m.homeTeam?.name ?? "TBD"} v {m.awayTeam?.name ?? "TBD"}
-                        </span>
+                  {/* On mobile just show dot count; on desktop show match names */}
+                  {dayMatches.length > 0 && (
+                    <>
+                      <div className="sm:hidden flex flex-wrap gap-0.5 mt-0.5">
+                        {dayMatches.slice(0, 3).map((m) => (
+                          <div key={m.id} className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[m.status] ?? "bg-gray-400"}`} />
+                        ))}
                       </div>
-                    ))}
-                    {dayMatches.length > 2 && (
-                      <span className="text-[9px] text-gray-400">+{dayMatches.length - 2} more</span>
-                    )}
-                  </div>
+                      <div className="hidden sm:block space-y-0.5 overflow-hidden">
+                        {dayMatches.slice(0, 2).map((m) => (
+                          <div key={m.id} className="flex items-center gap-0.5">
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[m.status] ?? "bg-gray-400"}`} />
+                            <span className="text-[9px] text-gray-600 truncate leading-tight">
+                              {m.homeTeam?.name ?? "TBD"} v {m.awayTeam?.name ?? "TBD"}
+                            </span>
+                          </div>
+                        ))}
+                        {dayMatches.length > 2 && (
+                          <span className="text-[9px] text-gray-400">+{dayMatches.length - 2} more</span>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </button>
               );
             })}
@@ -240,27 +253,27 @@ function UpcomingView({ matches }: { matches: Match[] }) {
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{date}</h3>
           <div className="bg-white rounded-xl border shadow-sm divide-y">
             {dayMatches.map((m) => (
-              <div key={m.id} className="px-4 py-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="flex-1 text-sm font-medium text-right text-gray-800">
+              <div key={m.id} className="px-3 sm:px-4 py-3">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <span className="text-xs sm:text-sm font-medium text-right text-gray-800 truncate">
                     {m.homeTeam?.name ?? "TBD"}
                   </span>
-                  <div className="text-center min-w-[60px]">
+                  <div className="text-center min-w-[52px] sm:min-w-[64px]">
                     {m.scheduledAt && (
                       <p className="text-xs font-semibold text-green-700">
                         {new Date(m.scheduledAt).toLocaleTimeString(undefined, { timeStyle: "short" })}
                       </p>
                     )}
-                    <p className="text-[10px] text-gray-400">{m.stage}</p>
+                    <p className="text-[10px] text-gray-400 leading-tight">{m.stage}</p>
                   </div>
-                  <span className="flex-1 text-sm font-medium text-gray-800">
+                  <span className="text-xs sm:text-sm font-medium text-gray-800 truncate">
                     {m.awayTeam?.name ?? "TBD"}
                   </span>
                 </div>
                 {m.venue && (
-                  <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-1 justify-center">
-                    <MapPin className="w-3 h-3" />
-                    {m.venue}{m.venueLocation ? `, ${m.venueLocation}` : ""}
+                  <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-1 justify-center truncate">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{m.venue}{m.venueLocation ? `, ${m.venueLocation}` : ""}</span>
                   </p>
                 )}
               </div>

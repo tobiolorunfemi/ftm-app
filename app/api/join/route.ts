@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { joinCode: parsed.data.joinCode },
+  const tournament = await prisma.tournament.findFirst({
+    where: { joinCode: { equals: parsed.data.joinCode, mode: "insensitive" } },
     include: { _count: { select: { teams: true } } },
   });
 

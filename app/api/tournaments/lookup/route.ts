@@ -7,9 +7,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing joinCode" }, { status: 400 });
   }
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { joinCode },
-    select: { id: true, name: true },
+  const tournament = await prisma.tournament.findFirst({
+    where: { joinCode: { equals: joinCode, mode: "insensitive" } },
+    select: { id: true, name: true, joinCode: true },
   });
 
   if (!tournament) {

@@ -143,10 +143,10 @@ function MatchEventsPanel({ match, onChanged }: { match: any; onChanged: () => v
           {/* Add event form */}
           <div className="bg-gray-50 rounded-lg p-3 space-y-2">
             <p className="text-[10px] font-semibold text-gray-500 uppercase">Log Match Event</p>
-            <div className="flex gap-2 flex-wrap items-end">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[10px] text-gray-400">Type</label>
-                <select value={type} onChange={(e) => setType(e.target.value)} className="block border rounded px-2 py-1 text-xs">
+                <select value={type} onChange={(e) => setType(e.target.value)} className="w-full block border rounded px-2 py-1.5 text-xs">
                   <option value="GOAL">⚽ Goal</option>
                   <option value="ASSIST">🎯 Assist</option>
                   <option value="YELLOW_CARD">🟨 Yellow Card</option>
@@ -154,14 +154,14 @@ function MatchEventsPanel({ match, onChanged }: { match: any; onChanged: () => v
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-gray-400">Min</label>
+                <label className="text-[10px] text-gray-400">Minute</label>
                 <input
                   type="number"
                   min={1}
                   max={120}
                   value={minute}
                   onChange={(e) => setMinute(e.target.value)}
-                  className="w-14 block border rounded px-2 py-1 text-xs text-center"
+                  className="w-full block border rounded px-2 py-1.5 text-xs text-center"
                   placeholder="45"
                 />
               </div>
@@ -170,7 +170,7 @@ function MatchEventsPanel({ match, onChanged }: { match: any; onChanged: () => v
                 <select
                   value={teamId}
                   onChange={(e) => { setTeamId(e.target.value); setPlayerId(""); }}
-                  className="block border rounded px-2 py-1 text-xs"
+                  className="w-full block border rounded px-2 py-1.5 text-xs"
                 >
                   {match.homeTeam && <option value={match.homeTeamId}>{match.homeTeam.name}</option>}
                   {match.awayTeam && <option value={match.awayTeamId}>{match.awayTeam.name}</option>}
@@ -178,22 +178,22 @@ function MatchEventsPanel({ match, onChanged }: { match: any; onChanged: () => v
               </div>
               <div>
                 <label className="text-[10px] text-gray-400">Player</label>
-                <select value={playerId} onChange={(e) => setPlayerId(e.target.value)} className="block border rounded px-2 py-1 text-xs max-w-[140px]">
+                <select value={playerId} onChange={(e) => setPlayerId(e.target.value)} className="w-full block border rounded px-2 py-1.5 text-xs">
                   <option value="">— select —</option>
                   {allPlayers.map((p) => (
                     <option key={p.id} value={p.id}>{p.name} ({p.position})</option>
                   ))}
                 </select>
               </div>
-              <button
-                onClick={addEvent}
-                disabled={adding || !type || !teamId}
-                className="flex items-center gap-1 bg-green-700 text-white px-3 py-1.5 rounded text-xs hover:bg-green-600 disabled:opacity-50"
-              >
-                {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                Log
-              </button>
             </div>
+            <button
+              onClick={addEvent}
+              disabled={adding || !type || !teamId}
+              className="w-full flex items-center justify-center gap-1.5 bg-green-700 text-white px-3 py-2 rounded text-xs font-medium hover:bg-green-600 disabled:opacity-50"
+            >
+              {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              Log Event
+            </button>
           </div>
         </>
       )}
@@ -243,30 +243,31 @@ function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
   return (
     <div className="space-y-3">
       {/* Score + status row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <input
-          type="number"
-          min={0}
-          value={home}
-          onChange={(e) => setHome(Number(e.target.value))}
-          className="w-14 border rounded px-2 py-1 text-center text-sm font-semibold"
-        />
-        <span className="text-gray-400 font-bold">–</span>
-        <input
-          type="number"
-          min={0}
-          value={away}
-          onChange={(e) => setAwayScore(Number(e.target.value))}
-          className="w-14 border rounded px-2 py-1 text-center text-sm font-semibold"
-        />
-
-        {/* Status quick-select */}
-        <div className="flex gap-1 ml-1">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            value={home}
+            onChange={(e) => setHome(Number(e.target.value))}
+            className="w-14 border rounded px-2 py-1.5 text-center text-base font-semibold"
+          />
+          <span className="text-gray-400 font-bold">–</span>
+          <input
+            type="number"
+            min={0}
+            value={away}
+            onChange={(e) => setAwayScore(Number(e.target.value))}
+            className="w-14 border rounded px-2 py-1.5 text-center text-base font-semibold"
+          />
+        </div>
+        {/* Status quick-select — wraps on mobile */}
+        <div className="flex flex-wrap gap-1">
           {(["SCHEDULED", "LIVE", "FINISHED", "POSTPONED"] as MatchStatus[]).map((s) => (
             <button
               key={s}
               onClick={() => setStatus(s)}
-              className={`text-[10px] font-medium px-2 py-1 rounded transition-colors ${
+              className={`text-[10px] font-medium px-2.5 py-1.5 rounded transition-colors ${
                 status === s
                   ? statusStyle[s] + " ring-1 ring-offset-1 ring-current"
                   : "bg-gray-100 text-gray-400 hover:bg-gray-200"
@@ -566,52 +567,51 @@ export default function FixturesPanel({ tournament }: { tournament: any }) {
                   </div>
                 )}
 
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="flex-1 text-sm font-medium text-right text-gray-800">
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 text-xs sm:text-sm font-medium text-right text-gray-800 truncate">
                     {match.homeTeam?.name ?? "TBD"}
                   </span>
 
-                  <div className="flex flex-col items-center min-w-[80px]">
+                  <div className="flex flex-col items-center shrink-0 min-w-[64px] sm:min-w-[80px]">
                     {match.status === "FINISHED" ? (
-                      <span className="text-lg font-bold text-gray-900">
+                      <span className="text-base sm:text-lg font-bold text-gray-900">
                         {match.homeScore} – {match.awayScore}
                       </span>
                     ) : match.status === "LIVE" ? (
-                      <span className="text-lg font-bold text-red-600">
+                      <span className="text-base sm:text-lg font-bold text-red-600">
                         {match.homeScore ?? 0} – {match.awayScore ?? 0}
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">vs</span>
                     )}
-                    <span
-                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full mt-0.5 ${
-                        statusStyle[match.status as MatchStatus]
-                      }`}
-                    >
+                    <span className={`text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded-full mt-0.5 ${statusStyle[match.status as MatchStatus]}`}>
                       {match.status}
                     </span>
                   </div>
 
-                  <span className="flex-1 text-sm font-medium text-gray-800">
+                  <span className="flex-1 text-xs sm:text-sm font-medium text-gray-800 truncate">
                     {match.awayTeam?.name ?? "TBD"}
                   </span>
 
-                  {match.homeTeam && match.awayTeam && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    {match.homeTeam && match.awayTeam && (
+                      <button
+                        onClick={() => setEditing(editing === match.id ? null : match.id)}
+                        className="text-xs text-green-700 border border-green-200 p-1.5 rounded hover:bg-green-50"
+                        title="Edit"
+                      >
+                        {editing === match.id ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
+                      </button>
+                    )}
                     <button
-                      onClick={() => setEditing(editing === match.id ? null : match.id)}
-                      className="text-xs text-green-700 border border-green-200 px-2 py-1 rounded hover:bg-green-50"
+                      onClick={() => deleteMatch(match.id)}
+                      disabled={deleting === match.id}
+                      className="text-red-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50"
+                      title="Delete"
                     >
-                      {editing === match.id ? "Cancel" : <><Pencil className="w-3 h-3 inline mr-1" />Edit</>}
+                      {deleting === match.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                     </button>
-                  )}
-
-                  <button
-                    onClick={() => deleteMatch(match.id)}
-                    disabled={deleting === match.id}
-                    className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50"
-                  >
-                    {deleting === match.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                  </button>
+                  </div>
                 </div>
 
                 {editing === match.id && (

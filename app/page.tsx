@@ -34,10 +34,10 @@ export default function HomePage() {
           <div className="flex justify-center mb-6">
             <Trophy className="w-16 h-16 opacity-90" />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
             Football Tournament Manager
           </h1>
-          <p className="text-xl text-green-100 mb-8 max-w-xl mx-auto">
+          <p className="text-base sm:text-xl text-green-100 mb-8 max-w-xl mx-auto">
             Run your community tournament like a pro. Generate fixtures, track scores,
             and keep teams updated — all in one place.
           </p>
@@ -69,7 +69,7 @@ export default function HomePage() {
         <h2 className="text-2xl font-bold text-center mb-10 text-gray-800">
           Everything you need to run a tournament
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
           {features.map(({ icon: Icon, title, desc }) => (
             <div
               key={title}
