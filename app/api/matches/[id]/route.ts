@@ -7,7 +7,7 @@ import { requireTournamentOwner } from "@/lib/apiAuth";
 const updateSchema = z.object({
   homeScore: z.number().int().min(0).optional(),
   awayScore: z.number().int().min(0).optional(),
-  status: z.enum(["SCHEDULED", "LIVE", "FINISHED", "POSTPONED"]).optional(),
+  status: z.enum(["SCHEDULED", "LIVE", "FINISHED", "POSTPONED", "CANCELLED", "WALKOVER"]).optional(),
   scheduledAt: z.string().datetime().optional().nullable(),
   homeTeamId: z.string().optional(),
   awayTeamId: z.string().optional(),
@@ -72,6 +72,8 @@ export async function PATCH(
   // Recalculate standings on any status or score change
   if (
     parsed.data.status === "FINISHED" ||
+    parsed.data.status === "WALKOVER" ||
+    parsed.data.status === "CANCELLED" ||
     parsed.data.status === "SCHEDULED" ||
     parsed.data.status === "POSTPONED" ||
     parsed.data.homeScore !== undefined

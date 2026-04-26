@@ -168,6 +168,8 @@ function TeamCard({
   const [assistantCoach, setAssistantCoach] = useState(team.assistantCoach ?? "");
   const [logo, setLogo] = useState(team.logo ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   // Add player form
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
@@ -192,12 +194,33 @@ function TeamCard({
     setExpanded(!expanded);
   };
 
+  const uploadLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { alert("Please select an image file."); return; }
+    if (file.size > 512 * 1024) { alert("Image must be under 500 KB."); return; }
+    setUploadingLogo(true);
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`/api/teams/${team.id}/logo`, { method: "POST", body: form });
+    const data = await res.json();
+    if (res.ok) { setLogo(data.logo); onChanged(); }
+    setUploadingLogo(false);
+    if (logoFileRef.current) logoFileRef.current.value = "";
+  };
+
+  const removeLogo = async () => {
+    await fetch(`/api/teams/${team.id}/logo`, { method: "DELETE" });
+    setLogo("");
+    onChanged();
+  };
+
   const saveProfile = async () => {
     setSavingProfile(true);
     await fetch(`/api/tournaments/${tournamentId}/teams/${team.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ headCoach, assistantCoach, logo }),
+      body: JSON.stringify({ headCoach, assistantCoach }),
     });
     setSavingProfile(false);
     setEditProfile(false);
@@ -327,13 +350,35 @@ function TeamCard({
             </div>
           </div>
           <div>
-            <label className="text-[10px] text-gray-500">Logo URL</label>
-            <input
-              value={logo}
-              onChange={(e) => setLogo(e.target.value)}
-              className="w-full border rounded px-2 py-1 text-sm"
-              placeholder="https://example.com/logo.png"
-            />
+            <label className="text-[10px] text-gray-500">Team Logo</label>
+            <div className="flex items-center gap-3 mt-1">
+              <div className="w-12 h-12 rounded-full bg-gray-100 border flex items-center justify-center shrink-0 overflow-hidden">
+                {logo ? (
+                  <img src={logo} alt="logo" className="w-full h-full object-cover" />
+                ) : (
+                  <ShieldCheck className="w-6 h-6 text-gray-300" />
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="flex items-center gap-1 text-xs text-green-700 hover:text-green-900 cursor-pointer font-medium">
+                  {uploadingLogo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  {logo ? "Change Logo" : "Upload Logo"}
+                  <input
+                    ref={logoFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={uploadLogo}
+                  />
+                </label>
+                {logo && (
+                  <button onClick={removeLogo} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
+                    <X className="w-3 h-3" /> Remove
+                  </button>
+                )}
+                <span className="text-[10px] text-gray-400">Max 500 KB · PNG, JPG, SVG</span>
+              </div>
+            </div>
           </div>
           <div className="flex gap-2 justify-end">
             <button onClick={() => setEditProfile(false)} className="text-xs text-gray-500 hover:text-gray-700">

@@ -8,9 +8,9 @@ export async function recalculateStandings(tournamentId: string) {
     select: { id: true, groupId: true },
   });
 
-  // Fetch all finished matches
+  // Fetch all finished + walkover matches (cancelled excluded — 0 pts each)
   const matches = await prisma.match.findMany({
-    where: { tournamentId, status: "FINISHED" },
+    where: { tournamentId, status: { in: ["FINISHED", "WALKOVER"] } },
     select: {
       homeTeamId: true,
       awayTeamId: true,

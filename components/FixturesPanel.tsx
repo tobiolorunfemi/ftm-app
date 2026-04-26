@@ -4,16 +4,18 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays, Loader2, Plus, Trash2, Pencil,
-  MapPin, Clock, ChevronDown, ChevronUp, X, Save, Check,
+  MapPin, Clock, ChevronDown, ChevronUp, X, Save, Check, ShieldCheck,
 } from "lucide-react";
 
-type MatchStatus = "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED";
+type MatchStatus = "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED" | "CANCELLED" | "WALKOVER";
 
 const statusStyle: Record<MatchStatus, string> = {
   SCHEDULED: "bg-gray-100 text-gray-600",
   LIVE: "bg-red-100 text-red-600 animate-pulse",
   FINISHED: "bg-green-100 text-green-700",
   POSTPONED: "bg-yellow-100 text-yellow-700",
+  CANCELLED: "bg-red-50 text-red-400",
+  WALKOVER: "bg-orange-100 text-orange-700",
 };
 
 const EVENT_ICONS: Record<string, string> = {
@@ -214,17 +216,31 @@ function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showEvents, setShowEvents] = useState(false);
+  // Walkover state
+  const [walkooverFavour, setWalkoverFavour] = useState<"home" | "away" | null>(null);
 
   const save = async (overrideStatus?: MatchStatus) => {
     const finalStatus = overrideStatus ?? status;
+    let finalHome = home;
+    let finalAway = away;
+
+    if (finalStatus === "CANCELLED") {
+      finalHome = 0;
+      finalAway = 0;
+    } else if (finalStatus === "WALKOVER") {
+      if (!walkooverFavour) { alert("Please select which team the walkover is in favour of."); return; }
+      finalHome = walkooverFavour === "home" ? 3 : 0;
+      finalAway = walkooverFavour === "away" ? 3 : 0;
+    }
+
     setSaving(true);
     try {
       await fetch(`/api/matches/${match.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          homeScore: home,
-          awayScore: away,
+          homeScore: finalHome,
+          awayScore: finalAway,
           status: finalStatus,
           venue: venue || undefined,
           venueLocation: venueLocation || undefined,
@@ -232,6 +248,8 @@ function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
         }),
       });
       if (overrideStatus) setStatus(overrideStatus);
+      setHome(finalHome);
+      setAwayScore(finalAway);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       onSave();
@@ -240,43 +258,90 @@ function ScoreEditor({ match, onSave }: { match: any; onSave: () => void }) {
     }
   };
 
+  const STATUS_LABELS: Record<MatchStatus, string> = {
+    SCHEDULED: "Scheduled", LIVE: "Live", FINISHED: "Full Time",
+    POSTPONED: "Postponed", CANCELLED: "Cancelled", WALKOVER: "Walkover",
+  };
+
   return (
     <div className="space-y-3">
       {/* Score + status row */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={0}
-            value={home}
-            onChange={(e) => setHome(Number(e.target.value))}
-            className="w-14 border rounded px-2 py-1.5 text-center text-base font-semibold"
-          />
-          <span className="text-gray-400 font-bold">–</span>
-          <input
-            type="number"
-            min={0}
-            value={away}
-            onChange={(e) => setAwayScore(Number(e.target.value))}
-            className="w-14 border rounded px-2 py-1.5 text-center text-base font-semibold"
-          />
-        </div>
-        {/* Status quick-select — wraps on mobile */}
+        {/* Only show score inputs for normal statuses */}
+        {status !== "CANCELLED" && status !== "WALKOVER" && (
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              value={home}
+              onChange={(e) => setHome(Number(e.target.value))}
+              className="w-14 border rounded px-2 py-1.5 text-center text-base font-semibold"
+            />
+            <span className="text-gray-400 font-bold">–</span>
+            <input
+              type="number"
+              min={0}
+              value={away}
+              onChange={(e) => setAwayScore(Number(e.target.value))}
+              className="w-14 border rounded px-2 py-1.5 text-center text-base font-semibold"
+            />
+          </div>
+        )}
+        {/* Status quick-select */}
         <div className="flex flex-wrap gap-1">
-          {(["SCHEDULED", "LIVE", "FINISHED", "POSTPONED"] as MatchStatus[]).map((s) => (
+          {(["SCHEDULED", "LIVE", "FINISHED", "POSTPONED", "CANCELLED", "WALKOVER"] as MatchStatus[]).map((s) => (
             <button
               key={s}
-              onClick={() => setStatus(s)}
+              onClick={() => { setStatus(s); if (s !== "WALKOVER") setWalkoverFavour(null); }}
               className={`text-[10px] font-medium px-2.5 py-1.5 rounded transition-colors ${
                 status === s
-                  ? statusStyle[s] + " ring-1 ring-offset-1 ring-current"
+                  ? (statusStyle[s] ?? "bg-gray-200 text-gray-700") + " ring-1 ring-offset-1 ring-current"
                   : "bg-gray-100 text-gray-400 hover:bg-gray-200"
               }`}
             >
-              {s === "SCHEDULED" ? "Scheduled" : s === "LIVE" ? "Live" : s === "FINISHED" ? "Full Time" : "Postponed"}
+              {STATUS_LABELS[s]}
             </button>
           ))}
         </div>
+
+        {/* Cancelled info */}
+        {status === "CANCELLED" && (
+          <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded px-3 py-2">
+            Both teams will receive 0 points and 0 goals. Match will be excluded from standings.
+          </div>
+        )}
+
+        {/* Walkover — who is it in favour of */}
+        {status === "WALKOVER" && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-orange-700 font-medium">Walkover in favour of:</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setWalkoverFavour("home")}
+                className={`flex-1 text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${
+                  walkooverFavour === "home"
+                    ? "bg-orange-100 border-orange-400 text-orange-800"
+                    : "bg-white border-gray-200 text-gray-600 hover:border-orange-300"
+                }`}
+              >
+                {match.homeTeam?.name ?? "Home"} (wins 3–0)
+              </button>
+              <button
+                onClick={() => setWalkoverFavour("away")}
+                className={`flex-1 text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${
+                  walkooverFavour === "away"
+                    ? "bg-orange-100 border-orange-400 text-orange-800"
+                    : "bg-white border-gray-200 text-gray-600 hover:border-orange-300"
+                }`}
+              >
+                {match.awayTeam?.name ?? "Away"} (wins 3–0)
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400">
+              Winning team gets 3 points and 3 goals. Losing team gets 0.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Venue & time */}
@@ -568,12 +633,20 @@ export default function FixturesPanel({ tournament }: { tournament: any }) {
                 )}
 
                 <div className="flex items-center gap-2">
-                  <span className="flex-1 text-xs sm:text-sm font-medium text-right text-gray-800 truncate">
-                    {match.homeTeam?.name ?? "TBD"}
-                  </span>
+                  {/* Home team */}
+                  <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
+                    <span className="text-xs sm:text-sm font-medium text-right text-gray-800 truncate">
+                      {match.homeTeam?.name ?? "TBD"}
+                    </span>
+                    <div className="w-6 h-6 rounded-full bg-gray-100 shrink-0 overflow-hidden flex items-center justify-center">
+                      {match.homeTeam?.logo
+                        ? <img src={match.homeTeam.logo} alt="" className="w-full h-full object-cover" />
+                        : <ShieldCheck className="w-3.5 h-3.5 text-gray-300" />}
+                    </div>
+                  </div>
 
                   <div className="flex flex-col items-center shrink-0 min-w-[64px] sm:min-w-[80px]">
-                    {match.status === "FINISHED" ? (
+                    {match.status === "FINISHED" || match.status === "WALKOVER" ? (
                       <span className="text-base sm:text-lg font-bold text-gray-900">
                         {match.homeScore} – {match.awayScore}
                       </span>
@@ -584,14 +657,22 @@ export default function FixturesPanel({ tournament }: { tournament: any }) {
                     ) : (
                       <span className="text-xs text-gray-400">vs</span>
                     )}
-                    <span className={`text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded-full mt-0.5 ${statusStyle[match.status as MatchStatus]}`}>
-                      {match.status}
+                    <span className={`text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded-full mt-0.5 ${statusStyle[match.status as MatchStatus] ?? "bg-gray-100 text-gray-500"}`}>
+                      {match.status === "WALKOVER" ? "W/O" : match.status === "CANCELLED" ? "Cancelled" : match.status}
                     </span>
                   </div>
 
-                  <span className="flex-1 text-xs sm:text-sm font-medium text-gray-800 truncate">
-                    {match.awayTeam?.name ?? "TBD"}
-                  </span>
+                  {/* Away team */}
+                  <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                    <div className="w-6 h-6 rounded-full bg-gray-100 shrink-0 overflow-hidden flex items-center justify-center">
+                      {match.awayTeam?.logo
+                        ? <img src={match.awayTeam.logo} alt="" className="w-full h-full object-cover" />
+                        : <ShieldCheck className="w-3.5 h-3.5 text-gray-300" />}
+                    </div>
+                    <span className="text-xs sm:text-sm font-medium text-gray-800 truncate">
+                      {match.awayTeam?.name ?? "TBD"}
+                    </span>
+                  </div>
 
                   <div className="flex items-center gap-1 shrink-0">
                     {match.homeTeam && match.awayTeam && (

@@ -1,23 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, MapPin, Clock, Info } from "lucide-react";
+import { CalendarDays, MapPin, Clock, Info, ShieldCheck } from "lucide-react";
 import BottomSheet from "@/components/BottomSheet";
 
-type MatchStatus = "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED";
+type MatchStatus = "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED" | "CANCELLED" | "WALKOVER";
 
-const statusStyle: Record<MatchStatus, string> = {
+const statusStyle: Record<string, string> = {
   SCHEDULED: "bg-gray-100 text-gray-500",
   LIVE: "bg-red-100 text-red-600 animate-pulse",
   FINISHED: "bg-green-100 text-green-700",
   POSTPONED: "bg-yellow-100 text-yellow-700",
+  CANCELLED: "bg-red-50 text-red-400",
+  WALKOVER: "bg-orange-100 text-orange-700",
 };
 
-const statusLabel: Record<MatchStatus, string> = {
+const statusLabel: Record<string, string> = {
   SCHEDULED: "Scheduled",
   LIVE: "Live",
   FINISHED: "Full Time",
   POSTPONED: "Postponed",
+  CANCELLED: "Cancelled",
+  WALKOVER: "Walkover",
 };
 
 const EVENT_ICON: Record<string, string> = {
@@ -41,23 +45,33 @@ function MatchDetailContent({ match }: { match: any }) {
       {/* Score */}
       <div className="bg-gray-50 rounded-xl p-4 text-center">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div className="text-right">
+          <div className="flex flex-col items-center gap-1.5 text-right">
+            <div className="w-12 h-12 rounded-full bg-white border flex items-center justify-center mx-auto overflow-hidden">
+              {match.homeTeam?.logo
+                ? <img src={match.homeTeam.logo} alt="" className="w-full h-full object-cover" />
+                : <ShieldCheck className="w-6 h-6 text-gray-300" />}
+            </div>
             <p className="text-sm font-bold text-gray-900">{match.homeTeam?.name ?? "TBD"}</p>
             <p className="text-xs text-gray-400">Home</p>
           </div>
           <div className="flex flex-col items-center">
-            {match.status === "FINISHED" || match.status === "LIVE" ? (
+            {match.status === "FINISHED" || match.status === "LIVE" || match.status === "WALKOVER" ? (
               <span className={`text-3xl font-black ${match.status === "LIVE" ? "text-red-600" : "text-gray-900"}`}>
                 {match.homeScore ?? 0} – {match.awayScore ?? 0}
               </span>
             ) : (
               <span className="text-xl font-bold text-gray-300">vs</span>
             )}
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1 ${statusStyle[match.status as MatchStatus] ?? "bg-gray-100 text-gray-500"}`}>
-              {statusLabel[match.status as MatchStatus] ?? match.status}
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1 ${statusStyle[match.status] ?? "bg-gray-100 text-gray-500"}`}>
+              {statusLabel[match.status] ?? match.status}
             </span>
           </div>
-          <div className="text-left">
+          <div className="flex flex-col items-center gap-1.5 text-left">
+            <div className="w-12 h-12 rounded-full bg-white border flex items-center justify-center mx-auto overflow-hidden">
+              {match.awayTeam?.logo
+                ? <img src={match.awayTeam.logo} alt="" className="w-full h-full object-cover" />
+                : <ShieldCheck className="w-6 h-6 text-gray-300" />}
+            </div>
             <p className="text-sm font-bold text-gray-900">{match.awayTeam?.name ?? "TBD"}</p>
             <p className="text-xs text-gray-400">Away</p>
           </div>
@@ -163,24 +177,38 @@ function MatchCard({ match, onClick }: { match: any; onClick: () => void }) {
 
       {/* Teams + score */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <span className="text-sm font-semibold text-right text-gray-800 truncate">
-          {match.homeTeam?.name ?? "TBD"}
-        </span>
+        <div className="flex items-center justify-end gap-1.5 min-w-0">
+          <span className="text-sm font-semibold text-right text-gray-800 truncate">
+            {match.homeTeam?.name ?? "TBD"}
+          </span>
+          <div className="w-6 h-6 rounded-full bg-gray-100 shrink-0 overflow-hidden flex items-center justify-center">
+            {match.homeTeam?.logo
+              ? <img src={match.homeTeam.logo} alt="" className="w-full h-full object-cover" />
+              : <ShieldCheck className="w-3.5 h-3.5 text-gray-300" />}
+          </div>
+        </div>
         <div className="flex flex-col items-center min-w-[64px]">
-          {match.status === "FINISHED" || match.status === "LIVE" ? (
+          {match.status === "FINISHED" || match.status === "LIVE" || match.status === "WALKOVER" ? (
             <span className={`text-base font-black leading-none ${match.status === "LIVE" ? "text-red-600" : "text-gray-900"}`}>
               {match.homeScore ?? 0} – {match.awayScore ?? 0}
             </span>
           ) : (
             <span className="text-xs font-medium text-gray-300">vs</span>
           )}
-          <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full mt-1 ${statusStyle[match.status as MatchStatus] ?? "bg-gray-100 text-gray-500"}`}>
-            {statusLabel[match.status as MatchStatus] ?? match.status}
+          <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full mt-1 ${statusStyle[match.status] ?? "bg-gray-100 text-gray-500"}`}>
+            {statusLabel[match.status] ?? match.status}
           </span>
         </div>
-        <span className="text-sm font-semibold text-gray-800 truncate">
-          {match.awayTeam?.name ?? "TBD"}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-6 h-6 rounded-full bg-gray-100 shrink-0 overflow-hidden flex items-center justify-center">
+            {match.awayTeam?.logo
+              ? <img src={match.awayTeam.logo} alt="" className="w-full h-full object-cover" />
+              : <ShieldCheck className="w-3.5 h-3.5 text-gray-300" />}
+          </div>
+          <span className="text-sm font-semibold text-gray-800 truncate">
+            {match.awayTeam?.name ?? "TBD"}
+          </span>
+        </div>
       </div>
     </button>
   );
